@@ -54,6 +54,12 @@ export interface PredictResponse {
   prediction: "UP" | "DOWN";
   confidence: number;
   explanation: FeatureImpact[];
+  indicators?: {
+    sma_20: number | null;
+    sma_50: number | null;
+    rsi: number | null;
+    macd: number | null;
+  };
   disclaimer: string;
 }
 
