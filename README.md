@@ -31,12 +31,15 @@ financial-market-intelligence-system/
 
 ## Features
 
-- **Multi-Model Prediction** — XGBoost, LightGBM, Random Forest, Logistic Regression with selectable champion model
-- **Explainability** — SHAP feature impact charts per prediction
-- **NLP Pipeline** — FinBERT (primary) + VADER (fallback) sentiment scoring
-- **Hourly Auto-Refresh** — APScheduler fetches new prices and news every hour
-- **Auto-Retrain** — Models automatically retrain when 30+ new price rows are added
-- **Full Audit Trail** — All predictions and API calls logged to PostgreSQL
+- **Multi-Horizon Prediction** — Forecast stock trends across 1-day, 3-day, and 5-day horizons.
+- **Enriched Feature Engineering** — 50+ quantitative features including regime detection, RSI crossovers, MACD signals, Bollinger percentages, and live macro-economic context (SPY/VIX).
+- **Multi-Model Inference** — XGBoost, LightGBM, Random Forest, Logistic Regression with selectable champion models.
+- **Explainable AI (XAI)** — Dynamic SHAP feature impact charts per prediction.
+- **NLP Pipeline** — FinBERT (primary) + VADER (fallback) real-time news sentiment scoring via RSS.
+- **Hourly Auto-Refresh** — APScheduler fetches new prices and news automatically every hour.
+- **Auto-Retrain Engine** — Models automatically retrain when 30+ new price rows are added.
+- **Responsive Mobile UI** — Glassmorphism React interface built for cross-device compatibility.
+- **Full Audit Trail** — All predictions and API calls logged to PostgreSQL.
 
 ---
 

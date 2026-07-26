@@ -22,7 +22,7 @@ from market_intelligence.ml.trainer import FEATURE_COLS, MODELS_DIR, build_featu
 
 router = APIRouter()
 
-VALID_MODELS = ("xgboost", "lightgbm", "random_forest", "logistic_regression")
+VALID_MODELS = tuple(f"{m}_{h}d" for m in ("xgboost", "lightgbm", "random_forest", "logistic_regression") for h in (1, 3, 5))
 
 
 def _load_model(model_name: str):
@@ -59,7 +59,7 @@ def _get_avg_sentiment(symbol: str) -> tuple[float, bool]:
         return 0.0, False
 
 
-def _get_feature_row(symbol: str) -> tuple[pd.DataFrame, bool]:
+def _get_feature_row(symbol: str, horizon: int = 1) -> tuple[pd.DataFrame, bool]:
     """
     Fetch prices + attach real sentiment from DB + merge macro market context.
     Returns (feature_row, has_sentiment_data).
@@ -102,7 +102,7 @@ def _get_feature_row(symbol: str) -> tuple[pd.DataFrame, bool]:
     except Exception as e:
         print(f"⚠️  Failed to attach market context in predict.py: {e}")
 
-    featured = build_features(prices)
+    featured = build_features(prices, horizon=horizon)
     if featured.empty:
         raise ValueError(f"Not enough price data to build features for {symbol}")
 
@@ -118,7 +118,7 @@ async def predict(req: PredictRequest, request: Request):
     """
     t0 = time.time()
     symbol = req.symbol.upper().strip().replace(".", "-")
-    model_name = req.model_name or "xgboost"
+    model_name = req.model_name or "xgboost_1d"
 
     if model_name not in VALID_MODELS:
         raise HTTPException(
@@ -126,11 +126,17 @@ async def predict(req: PredictRequest, request: Request):
             detail=f"Invalid model_name. Choose from: {VALID_MODELS}",
         )
 
+    # Extract horizon from model_name (e.g. "xgboost_3d" -> 3)
+    try:
+        horizon = int(model_name.split("_")[-1].replace("d", ""))
+    except Exception:
+        horizon = 1
+
     db = SessionLocal()
     try:
         # 1. Build feature row (with real sentiment from DB)
         try:
-            feature_row, has_sentiment = _get_feature_row(symbol)
+            feature_row, has_sentiment = _get_feature_row(symbol, horizon)
             if not has_sentiment:
                 # Try fetching live news and scoring it immediately
                 from market_intelligence.data.rss_news import fetch_rss_news
@@ -157,8 +163,8 @@ async def predict(req: PredictRequest, request: Request):
             raise HTTPException(status_code=404, detail=str(e))
 
         # Scale if logistic regression
-        if model_name == "logistic_regression":
-            scaler_path = MODELS_DIR / "scaler.joblib"
+        if model_name.startswith("logistic_regression"):
+            scaler_path = MODELS_DIR / f"scaler_{horizon}d.joblib"
             if scaler_path.exists():
                 scaler = joblib.load(scaler_path)
                 feature_row_input = scaler.transform(feature_row)
