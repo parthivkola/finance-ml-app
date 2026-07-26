@@ -79,6 +79,8 @@ def get_models():
                 version=r.version,
                 trained_at=str(r.trained_at),
                 accuracy=r.accuracy,
+                train_accuracy=r.train_accuracy,
+                overfit_status=r.overfit_status,
                 f1_score=r.f1_score,
                 roc_auc=r.roc_auc,
                 artifact_path=r.artifact_path,

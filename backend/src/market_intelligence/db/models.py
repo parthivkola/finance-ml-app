@@ -61,6 +61,8 @@ class ModelRegistry(Base):
     accuracy = Column(Float, nullable=True)
     f1_score = Column(Float, nullable=True)
     roc_auc = Column(Float, nullable=True)
+    train_accuracy = Column(Float, nullable=True)
+    overfit_status = Column(String, nullable=True)
     artifact_path = Column(String)            # path to .joblib file
     total_price_rows = Column(Integer, nullable=True)  # snapshot of row count at train time
 

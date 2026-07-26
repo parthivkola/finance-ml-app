@@ -64,7 +64,7 @@ def _get_feature_row(symbol: str, horizon: int = 1) -> tuple[pd.DataFrame, bool]
     Fetch prices + attach real sentiment from DB + merge macro market context.
     Returns (feature_row, has_sentiment_data).
     """
-    prices = fetch_prices(symbol, days=200)
+    prices = fetch_prices(symbol, days=400)
     if prices.empty:
         raise HTTPException(status_code=400, detail=f"Invalid stock symbol or no data found for '{symbol}'. Please enter a valid symbol (e.g. AAPL).")
 

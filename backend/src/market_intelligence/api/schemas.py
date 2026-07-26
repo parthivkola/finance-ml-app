@@ -46,6 +46,8 @@ class ModelMetrics(BaseModel):
     version: str
     trained_at: str
     accuracy: Optional[float]
+    train_accuracy: Optional[float] = None
+    overfit_status: Optional[str] = None
     f1_score: Optional[float]
     roc_auc: Optional[float]
     artifact_path: str

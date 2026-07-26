@@ -222,26 +222,46 @@ def _save_to_registry(
     version: str,
     artifact_path: Path,
     accuracy: float,
+    train_accuracy: float,
+    overfit_status: str,
     f1: float,
     roc_auc: float,
     total_price_rows: int = 0,
 ) -> None:
+    import os
     from market_intelligence.db.session import SessionLocal
     from market_intelligence.db.models import ModelRegistry
 
     db = SessionLocal()
     try:
+        # Save new record
         record = ModelRegistry(
             model_name=model_name,
             version=version,
             trained_at=datetime.now(timezone.utc),
             accuracy=accuracy,
+            train_accuracy=train_accuracy,
+            overfit_status=overfit_status,
             f1_score=f1,
             roc_auc=roc_auc,
             artifact_path=str(artifact_path),
             total_price_rows=total_price_rows,
         )
         db.add(record)
+        
+        # Cleanup old versions to save memory/disk space
+        old_records = db.query(ModelRegistry).filter(
+            ModelRegistry.model_name == model_name,
+            ModelRegistry.version != version
+        ).all()
+        for old in old_records:
+            if os.path.exists(old.artifact_path):
+                try:
+                    os.remove(old.artifact_path)
+                except Exception as e:
+                    print(f"Warning: could not delete {old.artifact_path}: {e}")
+            db.delete(old)
+            
         db.commit()
     finally:
         db.close()
@@ -398,7 +418,9 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
             path = MODELS_DIR / f"{name}_{version}.joblib"
             joblib.dump(clf, path)
 
-            _save_to_registry(name, version, path, acc, f1, roc, total_price_rows=len(df))
+            _save_to_registry(
+                name, version, path, acc, train_acc, overfit_status, f1, roc, total_price_rows=len(df)
+            )
 
             all_results[name] = {
                 "version": version,

@@ -54,7 +54,7 @@ function App() {
           onSelect={setSelectedModel} 
         />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+        <div className="dashboard-grid">
           {/* Left Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             <PredictionPanel 

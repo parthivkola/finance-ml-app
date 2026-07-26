@@ -45,7 +45,7 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
         >
           {models.map(m => (
             <option key={m.model_name} value={m.model_name}>
-              {m.model_name.replace('_', ' ')} (v{m.version})
+              {m.model_name.replace(/_/g, ' ')}
             </option>
           ))}
         </select>
@@ -69,6 +69,19 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ROC-AUC</div>
             <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
               {selectedData.roc_auc?.toFixed(3)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>STATUS</div>
+            <div style={{ 
+              fontSize: '1rem', 
+              fontWeight: 600, 
+              color: selectedData.overfit_status?.includes('OVERFIT') ? 'var(--accent-down)' : 'var(--accent-up)',
+              display: 'flex',
+              alignItems: 'center',
+              height: '1.25rem'
+            }}>
+              {selectedData.overfit_status || '✅ OK'}
             </div>
           </div>
         </div>

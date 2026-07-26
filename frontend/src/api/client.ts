@@ -14,6 +14,8 @@ export interface ModelMetrics {
   version: string;
   trained_at: string;
   accuracy: number | null;
+  train_accuracy: number | null;
+  overfit_status: string | null;
   f1_score: number | null;
   roc_auc: number | null;
 }
