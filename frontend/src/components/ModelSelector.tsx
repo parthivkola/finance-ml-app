@@ -32,7 +32,7 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
   const selectedData = models.find(m => m.model_name === selectedModel);
 
   return (
-    <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+    <div className="glass-panel model-selector-container">
       <div>
         <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
           Select Champion Model
@@ -52,7 +52,7 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
       </div>
 
       {selectedData && (
-        <div style={{ display: 'flex', gap: '1.5rem', borderLeft: '1px solid var(--border-color)', paddingLeft: '2rem' }}>
+        <div className="model-stats-border" style={{ display: 'flex', gap: '1.5rem' }}>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ACCURACY</div>
             <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>

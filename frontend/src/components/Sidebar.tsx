@@ -21,7 +21,7 @@ export const Sidebar: React.FC = () => {
   }, []);
 
   return (
-    <aside className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 4rem)', margin: '2rem 0 2rem 2rem', position: 'sticky', top: '2rem' }}>
+    <aside className="glass-panel sidebar">
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '3rem' }}>
         <BrainCircuit size={32} color="var(--accent-neutral)" />
         <h2 style={{ fontSize: '1rem', margin: 0, lineHeight: 1.3 }}>Financial Market<br/>Intelligence System</h2>

@@ -88,6 +88,50 @@ p {
   }
 }
 
+/* Responsive Component Classes */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 4rem);
+  margin: 2rem 0 2rem 2rem;
+  position: sticky;
+  top: 2rem;
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    height: auto;
+    margin: 1rem;
+    position: static;
+  }
+}
+
+.model-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.model-stats-border {
+  border-left: 1px solid var(--border-color);
+  padding-left: 2rem;
+}
+
+@media (max-width: 768px) {
+  .model-selector-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .model-stats-border {
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+    padding-left: 0;
+    padding-top: 1rem;
+    width: 100%;
+  }
+}
+
 /* Form Controls */
 .input-field {
   background: rgba(15, 23, 42, 0.6);

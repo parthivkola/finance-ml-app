@@ -44,8 +44,8 @@ export const PredictionPanel: React.FC<Props> = ({ selectedModel, onPredictionCo
         <p>Enter a stock symbol to generate an AI-driven movement prediction.</p>
       </div>
 
-      <form onSubmit={handleAnalyze} style={{ display: 'flex', gap: '1rem' }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+      <form onSubmit={handleAnalyze} style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
           <Search size={20} color="var(--text-muted)" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
           <input 
             type="text" 
@@ -99,6 +99,7 @@ export const PredictionPanel: React.FC<Props> = ({ selectedModel, onPredictionCo
           {result.indicators && (
             <div style={{ 
               display: 'flex', 
+              flexWrap: 'wrap',
               gap: '1.5rem', 
               marginTop: '1.5rem', 
               padding: '1rem', 
