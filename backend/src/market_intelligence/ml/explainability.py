@@ -43,6 +43,7 @@ def explain(
     Returns:
         List of {"feature": str, "impact": float} sorted by |impact| desc.
     """
+    import numpy as np
     model = _load_latest(model_name)
 
     # Extract horizon for scaler path (e.g. "xgboost_3d" -> 3)
@@ -51,38 +52,54 @@ def explain(
     except Exception:
         horizon = 1
 
-    # Choose explainer based on model family — use startswith to match "xgboost_1d" etc.
     is_tree = model_name.startswith(("xgboost", "lightgbm", "random_forest"))
+    is_rf = model_name.startswith("random_forest")
+
     if is_tree:
         explainer = shap.TreeExplainer(model)
         shap_vals = explainer.shap_values(feature_row)
 
-        # For binary classifiers shap_values may be a list [neg_class, pos_class]
-        if isinstance(shap_vals, list):
-            vals = shap_vals[1][0]  # positive class
+        if is_rf:
+            # sklearn RF returns list of [neg_class_array, pos_class_array]
+            # each array is shape (n_samples, n_features)
+            if isinstance(shap_vals, list) and len(shap_vals) >= 2:
+                vals = np.array(shap_vals[1][0])  # positive class, first sample
+            elif isinstance(shap_vals, np.ndarray) and shap_vals.ndim == 3:
+                vals = shap_vals[0, :, 1]  # shape (n_samples, n_features, n_classes)
+            else:
+                vals = np.array(shap_vals).flatten()
         else:
-            # XGBoost returns a 2D array directly
-            vals = shap_vals[0] if shap_vals.ndim == 1 else shap_vals[0]
+            # XGBoost / LightGBM: returns 2D array (n_samples, n_features)
+            if isinstance(shap_vals, list):
+                vals = shap_vals[1][0]
+            else:
+                vals = shap_vals[0] if shap_vals.ndim == 1 else shap_vals[0]
     else:
-        # Logistic Regression → LinearExplainer
+        # Logistic Regression → LinearExplainer with proper background
         scaler_path = MODELS_DIR / f"scaler_{horizon}d.joblib"
         scaler = joblib.load(scaler_path) if scaler_path.exists() else None
         data = scaler.transform(feature_row) if scaler else feature_row.values
+        # Use the feature row as background so we get relative impacts, not zeros
+        background = np.zeros_like(data)  # zero baseline = neutral baseline
         explainer = shap.LinearExplainer(
-            model, masker=shap.maskers.Independent(data)
+            model, masker=shap.maskers.Independent(background)
         )
         shap_vals = explainer.shap_values(data)
-        vals = shap_vals[0]
+        vals = np.array(shap_vals[0]) if isinstance(shap_vals, list) else np.array(shap_vals).flatten()
 
+    vals = np.array(vals).flatten()
     feature_names = feature_row.columns.tolist()
+
+    # Guard against length mismatch
+    min_len = min(len(feature_names), len(vals))
     impacts = sorted(
-        zip(feature_names, vals),
+        zip(feature_names[:min_len], vals[:min_len]),
         key=lambda x: abs(x[1]),
         reverse=True,
     )
 
-    # Distinguish positive vs negative influences
     return [
         {"feature": name, "impact": round(float(val), 6)}
         for name, val in impacts[:top_n]
+        if val != 0.0  # filter out zero-impact features for clarity
     ]
