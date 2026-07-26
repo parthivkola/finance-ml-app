@@ -124,6 +124,53 @@ def refresh_prices_and_retrain() -> None:
     logger.info("=== Hourly price refresh complete ===")
 
 
+# ─── Daily cleanup (disk + DB) ────────────────────────────────────────────────
+
+def daily_cleanup() -> None:
+    """
+    Runs daily at 02:00 UTC. Purges:
+    - Old API logs and prediction records older than 90 days (keeps DB lean)
+    - Docker build cache (keeps disk space free on t3.micro)
+    - Python garbage collection pass
+    """
+    import gc
+    import subprocess
+    from market_intelligence.db.session import engine
+    from sqlalchemy import text
+
+    logger.info("=== Daily cleanup started ===")
+
+    # 1. Prune old DB records
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(
+                "DELETE FROM api_logs WHERE requested_at < NOW() - INTERVAL '90 days'"
+            ))
+            conn.execute(text(
+                "DELETE FROM predictions WHERE predicted_at < NOW() - INTERVAL '90 days'"
+            ))
+            conn.commit()
+            logger.info("DB cleanup: removed old logs and predictions")
+    except Exception as exc:
+        logger.error("DB cleanup failed: %s", exc)
+
+    # 2. Prune Docker build cache (free disk space)
+    try:
+        result = subprocess.run(
+            ["docker", "builder", "prune", "-f", "--keep-storage", "500mb"],
+            capture_output=True, text=True, timeout=60
+        )
+        logger.info("Docker prune: %s", result.stdout.strip() or "done")
+    except Exception as exc:
+        logger.warning("Docker prune skipped (not available in container): %s", exc)
+
+    # 3. Python GC pass
+    collected = gc.collect()
+    logger.info("GC: collected %d objects", collected)
+
+    logger.info("=== Daily cleanup complete ===")
+
+
 # ─── Scheduler setup ──────────────────────────────────────────────────────────
 
 def create_scheduler() -> BackgroundScheduler:
@@ -149,6 +196,18 @@ def create_scheduler() -> BackgroundScheduler:
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=300,
+    )
+
+    # Daily cleanup: DB records + Docker build cache at 02:00 UTC
+    from apscheduler.triggers.cron import CronTrigger
+    scheduler.add_job(
+        daily_cleanup,
+        trigger=CronTrigger(hour=2, minute=0, timezone="UTC"),
+        id="daily_cleanup",
+        name="Daily DB + Disk Cleanup",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=600,
     )
 
     return scheduler

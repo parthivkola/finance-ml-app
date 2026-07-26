@@ -13,8 +13,11 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
   useEffect(() => {
     api.getModels()
       .then(data => {
+        // Only keep valid multi-horizon models (e.g. xgboost_1d, lightgbm_3d)
+        const VALID = /^(xgboost|lightgbm|random_forest|logistic_regression)_(1|3|5)d$/;
+        const filtered = data.filter(m => VALID.test(m.model_name));
         // Dedup by model_name, taking highest version
-        const unique = data.reduce((acc, curr) => {
+        const unique = filtered.reduce((acc, curr) => {
           if (!acc[curr.model_name] || acc[curr.model_name].version < curr.version) {
             acc[curr.model_name] = curr;
           }

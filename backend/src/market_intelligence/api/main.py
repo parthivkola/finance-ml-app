@@ -36,7 +36,15 @@ app = FastAPI(
 # CORS — allow React frontend and any API consumer (FR-API-001)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:8080"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://finance-market-intelligence.app",
+        "https://finance-market-intelligence.app",
+        "http://www.finance-market-intelligence.app",
+        "https://www.finance-market-intelligence.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
