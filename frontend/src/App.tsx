@@ -8,7 +8,7 @@ import { NewsFeed } from './components/NewsFeed';
 import { api, type HistoryRecord, type NewsRecord, type PredictResponse } from './api/client';
 
 function App() {
-  const [selectedModel, setSelectedModel] = useState<string>('xgboost');
+  const [selectedModel, setSelectedModel] = useState<string>('xgboost_1d');
   const [currentSymbol, setCurrentSymbol] = useState<string | null>(null);
   
   const [historyData, setHistoryData] = useState<HistoryRecord[]>([]);
