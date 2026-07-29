@@ -178,6 +178,10 @@ async def predict(req: PredictRequest, request: Request):
                 except Exception as db_err:
                     print(f"Failed to query overfit status for ensemble: {db_err}")
 
+                import numpy as np
+                ensemble_probs = []
+                model_objects = []
+
                 for base_name in ["xgboost", "lightgbm", "random_forest", "logistic_regression"]:
                     test_name = f"{base_name}_{horizon}d"
                     if test_name in overfit_models:
@@ -199,15 +203,15 @@ async def predict(req: PredictRequest, request: Request):
                         f_input = feature_row
                         
                     probs = m.predict_proba(f_input)[0]
-                    conf = float(max(probs))
-                    
-                    if conf > best_conf:
-                        best_conf = conf
-                        best_model = m
-                        best_actual_name = test_name
-                        best_feature_input = f_input
+                    ensemble_probs.append(probs)
+                    model_objects.append({
+                        "name": test_name,
+                        "model": m,
+                        "feature_input": f_input,
+                        "probs": probs
+                    })
                         
-                if not best_model:
+                if not model_objects:
                     # Fallback: if all were overfit, just load whatever is available
                     for base_name in ["xgboost", "lightgbm", "random_forest", "logistic_regression"]:
                         test_name = f"{base_name}_{horizon}d"
@@ -227,20 +231,29 @@ async def predict(req: PredictRequest, request: Request):
                             f_input = feature_row
                             
                         probs = m.predict_proba(f_input)[0]
-                        conf = float(max(probs))
-                        
-                        if conf > best_conf:
-                            best_conf = conf
-                            best_model = m
-                            best_actual_name = test_name
-                            best_feature_input = f_input
+                        ensemble_probs.append(probs)
+                        model_objects.append({
+                            "name": test_name,
+                            "model": m,
+                            "feature_input": f_input,
+                            "probs": probs
+                        })
                             
-                    if not best_model:
+                    if not model_objects:
                         raise FileNotFoundError(f"No models found for horizon {horizon}d to run ensemble.")
                     
-                model = best_model
-                model_name = best_actual_name
-                feature_row_input = best_feature_input
+                # Calculate Soft Voting Average
+                avg_probs = np.mean(ensemble_probs, axis=0)
+                winning_class = 1 if avg_probs[1] > 0.5 else 0
+                
+                # Pick the model with highest confidence in the winning direction for SHAP proxy
+                best_proxy_model = max(model_objects, key=lambda x: x["probs"][winning_class])
+                
+                model = best_proxy_model["model"]
+                model_name = best_proxy_model["name"]
+                feature_row_input = best_proxy_model["feature_input"]
+                probas = avg_probs
+                
             else:
                 model = _load_model(model_name)
                 # Scale if logistic regression
@@ -253,10 +266,12 @@ async def predict(req: PredictRequest, request: Request):
                         feature_row_input = feature_row.values
                 else:
                     feature_row_input = feature_row
+                    
+                probas = model.predict_proba(feature_row_input)[0]
+                
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
 
-        probas = model.predict_proba(feature_row_input)[0]
         confidence = float(max(probas))
         
         if confidence < 0.60:
