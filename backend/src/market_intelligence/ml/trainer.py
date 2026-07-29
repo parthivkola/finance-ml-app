@@ -375,7 +375,7 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
             ),
             f"random_forest_{horizon}d": RandomForestClassifier(
                 n_estimators=300, max_depth=6, min_samples_leaf=10,
-                min_samples_split=20, max_features="sqrt", random_state=42, n_jobs=-1,
+                min_samples_split=20, max_features="sqrt", random_state=42, n_jobs=1,
             ),
             f"xgboost_{horizon}d": xgb.XGBClassifier(**best_xgb_params),
             f"lightgbm_{horizon}d": lgb.LGBMClassifier(**best_lgbm_params),
