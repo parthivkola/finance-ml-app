@@ -202,9 +202,9 @@ export const PredictionPanel: React.FC<Props> = ({
                 </div>
               ) : (
                 <p style={{
-                  fontSize: '0.875rem',
+                  fontSize: '0.95rem',
                   lineHeight: 1.7,
-                  color: 'var(--text-secondary)',
+                  color: 'var(--text-primary)',
                   margin: 0,
                   whiteSpace: 'pre-wrap',
                 }}>
