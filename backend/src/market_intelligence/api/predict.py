@@ -175,7 +175,11 @@ async def predict(req: PredictRequest, request: Request):
 
         probas = model.predict_proba(feature_row_input)[0]
         confidence = float(max(probas))
-        pred_label = "UP" if probas[1] > 0.5 else "DOWN"
+        
+        if confidence < 0.60:
+            pred_label = "NEUTRAL"
+        else:
+            pred_label = "UP" if probas[1] > 0.5 else "DOWN"
 
         # 3. Calculate SHAP explainability
         try:

@@ -46,7 +46,7 @@ financial-market-intelligence-system/
 ## Quick Start (Docker)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/financial-market-intelligence-system
+git clone https://github.com/parthivkola/financial-market-intelligence-system
 cd financial-market-intelligence-system
 
 # Add your API keys

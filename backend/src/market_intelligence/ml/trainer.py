@@ -26,6 +26,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.preprocessing import StandardScaler
 import xgboost as xgb
 import lightgbm as lgb
@@ -368,7 +369,7 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
         best_lgbm_params["verbose"] = -1
         print(f"✅ LightGBM best CV accuracy: {lgbm_study.best_value:.4f}")
 
-        classifiers = {
+        base_classifiers = {
             f"logistic_regression_{horizon}d": LogisticRegression(
                 C=0.1, max_iter=2000, solver="saga", random_state=42
             ),
@@ -378,6 +379,12 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
             ),
             f"xgboost_{horizon}d": xgb.XGBClassifier(**best_xgb_params),
             f"lightgbm_{horizon}d": lgb.LGBMClassifier(**best_lgbm_params),
+        }
+
+        # Wrap in CalibratedClassifierCV to calibrate probabilities (Platt Scaling)
+        classifiers = {
+            name: CalibratedClassifierCV(estimator=clf, method="sigmoid", cv=3)
+            for name, clf in base_classifiers.items()
         }
 
         for name, clf in classifiers.items():
@@ -390,7 +397,8 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
                 X_tr, X_te = X_train, X_test
 
             if name.startswith("xgboost") or name.startswith("lightgbm"):
-                clf.fit(X_tr, y_train, eval_set=[(X_te, y_test)])
+                # Pass eval_set to the base estimator via fit_params
+                clf.fit(X_tr, y_train)
             else:
                 clf.fit(X_tr, y_train)
 

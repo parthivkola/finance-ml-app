@@ -57,7 +57,11 @@ def _build_prompt(req: ExplainRequest) -> str:
         "5-day" if "5d" in req.model_name else
         "next-day"
     )
-    direction = "upward" if req.prediction == "UP" else "downward"
+    direction = (
+        "upward" if req.prediction == "UP" else
+        "downward" if req.prediction == "DOWN" else
+        "neutral (no clear edge)"
+    )
     confidence_pct = req.confidence * 100
 
     # Top 5 SHAP features sorted by absolute impact
@@ -146,11 +150,11 @@ Confidence:    {confidence_pct:.1f}%
 === INSTRUCTIONS ===
 Write exactly 2–3 tight paragraphs:
 
-Paragraph 1 — Forecast summary: State the directional call, the horizon, and the confidence level. Frame it as a probabilistic view, not a certainty.
+Paragraph 1 — Forecast summary: State the directional call (or if it's NEUTRAL due to low confidence), the horizon, and the confidence level. Frame it as a probabilistic view.
 
 Paragraph 2 — Driver analysis: Explain what the top SHAP features actually mean in market terms. Connect the dots — e.g. if RSI is overbought AND MACD is positive AND price is above its 20-day SMA, explain what that combination typically signals and why the model is reading it as {direction} pressure. Be specific to {req.symbol}.
 
-Paragraph 3 (optional, only if warranted) — Risks and caveats: If there are conflicting signals (e.g. overbought RSI but bullish SHAP drivers), if confidence is below 60%, or if the model has overfitting concerns, state this clearly. If everything is consistent, skip this paragraph.
+Paragraph 3 (optional, only if warranted) — Risks and caveats: If the signal is NEUTRAL, explain why the model lacks conviction (e.g. conflicting technicals). If there are overfitting concerns, state this clearly. If everything is consistent, skip this paragraph.
 
 Rules:
 - No bullet points, no headers, no markdown

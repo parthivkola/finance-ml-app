@@ -49,8 +49,8 @@ export const ShapExplainer: React.FC<Props> = ({ data }) => {
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0.5rem' }}>
-        Shows which indicators drove the model's decision (Green = UP pressure, Red = DOWN pressure)
+      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0.5rem' }}>
+        Positive impact → bullish signal &nbsp;·&nbsp; Negative impact → bearish signal
       </div>
     </div>
   );

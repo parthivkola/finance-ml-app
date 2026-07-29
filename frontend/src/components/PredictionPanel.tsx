@@ -121,7 +121,9 @@ export const PredictionPanel: React.FC<Props> = ({
             className={clsx('pred-' + result.prediction.toLowerCase())}
             style={{ fontSize: '3.5rem', fontWeight: 700, lineHeight: 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
-            <span style={{ fontSize: '2.5rem' }}>{result.prediction === 'UP' ? '▲' : '▼'}</span>
+            <span style={{ fontSize: '2.5rem' }}>
+              {result.prediction === 'UP' ? '▲' : result.prediction === 'DOWN' ? '▼' : '-'}
+            </span>
             {result.prediction}
           </div>
 

@@ -61,7 +61,7 @@ export interface FeatureImpact {
 export interface PredictResponse {
   symbol: string;
   model_name: string;
-  prediction: "UP" | "DOWN";
+  prediction: "UP" | "DOWN" | "NEUTRAL";
   confidence: number;
   explanation: FeatureImpact[];
   indicators?: {
