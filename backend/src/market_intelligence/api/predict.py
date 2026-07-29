@@ -259,8 +259,14 @@ async def predict(req: PredictRequest, request: Request):
                 probas = weighted_probs
 
                 # For SHAP: use highest accuracy-weighted confidence model as proxy
+                # We prioritize tree-based models (XGBoost/LightGBM/RF) because 
+                # LinearExplainer (Logistic Regression) requires a full background dataset
+                # which isn't available for single-row inference.
+                tree_models = [mo for mo in model_objects if mo["name"].startswith(("xgboost", "lightgbm", "random_forest"))]
+                proxy_candidates = tree_models if tree_models else model_objects
+                
                 best_proxy_model = max(
-                    model_objects,
+                    proxy_candidates,
                     key=lambda x: x["probs"][winning_class] * model_accuracies.get(x["name"], 0.5)
                 )
                 model = best_proxy_model["model"]
@@ -296,7 +302,8 @@ async def predict(req: PredictRequest, request: Request):
         try:
             available_cols = [c for c in FEATURE_COLS if c in feature_row.columns]
             shap_impacts = explain(feature_row[available_cols], model_name)
-        except Exception:
+        except Exception as e:
+            print(f"SHAP EXCEPTION for {model_name}: {str(e)}")
             shap_impacts = []
 
         # 4. Persist prediction
