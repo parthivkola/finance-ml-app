@@ -18,11 +18,10 @@ Built with an autonomous background scheduler, it continuously ingests live RSS 
 
 ## Dashboard Preview
 
-*(Placeholders for your screenshots — add them to the `docs/` folder!)*
 
 <div align="center">
   <img src="docs/dashboard.png" alt="Dashboard View" width="800"/>
-  <p><i>Live prediction dashboard featuring dynamic SHAP analysis and Recharts visualizations.</i></p>
+  <p><i>Live prediction dashboard featuring dynamic  Recharts visualizations.</i></p>
 </div>
 
 ---
