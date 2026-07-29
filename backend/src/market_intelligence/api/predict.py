@@ -242,26 +242,20 @@ async def predict(req: PredictRequest, request: Request):
                 if not model_objects:
                     raise FileNotFoundError(f"No models found for horizon {horizon}d to run ensemble.")
                     
-                # 1. Hard Voting
-                votes = [1 if mo["probs"][1] > 0.5 else 0 for mo in model_objects]
-                up_votes = sum(votes)
-                total_votes = len(votes)
+                # 1. Soft Voting (Probability Averaging)
+                avg_probs = np.mean(ensemble_probs, axis=0)
+                winning_class = 1 if avg_probs[1] > 0.5 else 0
                 
-                # Check for tie
-                if up_votes == total_votes / 2:
-                    # 2-2 tie -> Force a neutral output by simulating low confidence
-                    best_proxy_model = model_objects[0]
-                    probas = [0.5, 0.5]
-                else:
-                    # Find majority direction
-                    winning_class = 1 if up_votes > total_votes / 2 else 0
+                # 2. Filter models that individually voted with the winning class
+                winning_models = [mo for mo in model_objects if (1 if mo["probs"][1] > 0.5 else 0) == winning_class]
+                
+                # If no model independently voted for the winning class (edge case), fallback to all models
+                if not winning_models:
+                    winning_models = model_objects
                     
-                    # Filter models that voted with the majority
-                    winning_models = [mo for mo in model_objects if (1 if mo["probs"][1] > 0.5 else 0) == winning_class]
-                    
-                    # Pick the one with the highest confidence in the winning direction
-                    best_proxy_model = max(winning_models, key=lambda x: x["probs"][winning_class])
-                    probas = best_proxy_model["probs"]
+                # 3. Pick the one with the highest confidence in the winning direction
+                best_proxy_model = max(winning_models, key=lambda x: x["probs"][winning_class])
+                probas = best_proxy_model["probs"]
                 
                 model = best_proxy_model["model"]
                 model_name = best_proxy_model["name"]

@@ -465,20 +465,21 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
                     X_input = row_scaled if name.startswith("logistic_regression") else row_unscaled
                     model_probs.append(clf.predict_proba(X_input)[0])
                     
-                # Hard Voting
-                votes = [1 if p[1] > 0.5 else 0 for p in model_probs]
-                up_votes = sum(votes)
-                total_votes = len(votes)
+                # Soft Voting (Probability Averaging)
+                avg_probs = np.mean(model_probs, axis=0)
+                winning_class = 1 if avg_probs[1] > 0.5 else 0
                 
-                if up_votes == total_votes / 2:
-                    ensemble_preds.append(0)
-                    ensemble_probas.append(0.5)
-                else:
-                    winning_class = 1 if up_votes > total_votes / 2 else 0
-                    winning_probs = [p for p in model_probs if (1 if p[1] > 0.5 else 0) == winning_class]
-                    max_prob = max(winning_probs, key=lambda x: x[winning_class])[1]
-                    ensemble_preds.append(winning_class)
-                    ensemble_probas.append(max_prob)
+                # Filter models that individually voted with the winning class
+                winning_probs = [p for p in model_probs if (1 if p[1] > 0.5 else 0) == winning_class]
+                
+                # Fallback if no model voted for the winning direction
+                if not winning_probs:
+                    winning_probs = model_probs
+                    
+                # Pick max confidence in winning direction
+                max_prob = max(winning_probs, key=lambda x: x[winning_class])[1]
+                ensemble_preds.append(winning_class)
+                ensemble_probas.append(max_prob)
                     
             ens_acc = accuracy_score(y_test, ensemble_preds)
             ens_f1 = f1_score(y_test, ensemble_preds, zero_division=0)
