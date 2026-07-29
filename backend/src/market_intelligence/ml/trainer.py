@@ -324,13 +324,14 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
         # ── XGBoost Tuning ──
         def optimize_xgb(trial):
             params = {
-                "n_estimators": trial.suggest_int("n_estimators", 100, 300),
-                "max_depth": trial.suggest_int("max_depth", 2, 6),
+                "n_estimators": trial.suggest_int("n_estimators", 50, 150),
+                "max_depth": trial.suggest_int("max_depth", 2, 4),
                 "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
-                "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-                "reg_alpha": trial.suggest_float("reg_alpha", 0.01, 10.0, log=True),
-                "reg_lambda": trial.suggest_float("reg_lambda", 0.01, 10.0, log=True),
+                "subsample": trial.suggest_float("subsample", 0.6, 0.9),
+                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 0.9),
+                "reg_alpha": trial.suggest_float("reg_alpha", 0.1, 10.0, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 1.0, 10.0, log=True),
+                "min_child_weight": trial.suggest_int("min_child_weight", 5, 20),
                 "random_state": 42,
                 "eval_metric": "logloss",
             }
@@ -349,13 +350,14 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
         # ── LightGBM Tuning ──
         def optimize_lgbm(trial):
             params = {
-                "n_estimators": trial.suggest_int("n_estimators", 100, 300),
-                "max_depth": trial.suggest_int("max_depth", 2, 6),
+                "n_estimators": trial.suggest_int("n_estimators", 50, 150),
+                "max_depth": trial.suggest_int("max_depth", 2, 4),
                 "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
-                "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-                "reg_alpha": trial.suggest_float("reg_alpha", 0.01, 10.0, log=True),
-                "reg_lambda": trial.suggest_float("reg_lambda", 0.01, 10.0, log=True),
+                "subsample": trial.suggest_float("subsample", 0.6, 0.9),
+                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 0.9),
+                "reg_alpha": trial.suggest_float("reg_alpha", 0.1, 10.0, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 1.0, 10.0, log=True),
+                "min_child_samples": trial.suggest_int("min_child_samples", 20, 50),
                 "random_state": 42,
                 "verbose": -1,
             }
