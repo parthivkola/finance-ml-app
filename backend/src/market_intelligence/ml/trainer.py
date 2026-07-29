@@ -383,71 +383,51 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
         del lgbm_study
         gc.collect()
 
+        # 4 diverse models — original configs, full accuracy, no size cuts.
+        # Sequential training: each model is deleted from RAM after saving to disk,
+        # so peak memory = max(one model) instead of sum(all models).
         base_classifiers = {
-            f"logistic_regression_{horizon}d": LogisticRegression(
-                C=0.1, max_iter=2000, solver="saga", random_state=42
+            f"logistic_regression_{horizon}d": (
+                CalibratedClassifierCV(
+                    estimator=LogisticRegression(C=0.1, max_iter=2000, solver="saga", random_state=42),
+                    method="sigmoid", cv=3
+                ),
+                "scaled"   # flag: needs StandardScaler input
             ),
-            f"random_forest_{horizon}d": RandomForestClassifier(
-                # Reduced from 300→100 trees to save ~70MB RAM on t3.micro
-                n_estimators=100, max_depth=5, min_samples_leaf=15,
-                min_samples_split=30, max_features="sqrt", random_state=42, n_jobs=1,
+            f"random_forest_{horizon}d": (
+                RandomForestClassifier(
+                    n_estimators=300, max_depth=6, min_samples_leaf=10,
+                    min_samples_split=20, max_features="sqrt", random_state=42, n_jobs=1,
+                ),
+                "raw"
             ),
-            f"xgboost_{horizon}d": xgb.XGBClassifier(**best_xgb_params),
-            f"lightgbm_{horizon}d": lgb.LGBMClassifier(**best_lgbm_params),
-            # --- 3 new diverse classifiers ---
-            # AdaBoost with decision stumps: focuses on hard-to-classify samples,
-            # orthogonal to gradient boosting (which focuses on residuals, not sample weights)
-            f"adaboost_{horizon}d": AdaBoostClassifier(
-                estimator=DecisionTreeClassifier(max_depth=1),
-                n_estimators=50, learning_rate=0.5, random_state=42, algorithm="SAMME"
+            f"xgboost_{horizon}d": (
+                xgb.XGBClassifier(**best_xgb_params),
+                "raw"
             ),
-            # LinearSVC: finds a max-margin linear boundary in high-dim space.
-            # Use LinearSVC (not RBF-SVM) to avoid computing an N×N kernel matrix.
-            # Wrap in CalibratedClassifierCV to get probabilities from the SVM.
-            f"linear_svc_{horizon}d": CalibratedClassifierCV(
-                estimator=LinearSVC(C=0.1, max_iter=2000, random_state=42),
-                method="sigmoid", cv=3
+            f"lightgbm_{horizon}d": (
+                lgb.LGBMClassifier(**best_lgbm_params),
+                "raw"
             ),
-            # GaussianNB: pure statistical prior — extremely low variance,
-            # catches regime changes when all other models are confused
-            f"gaussian_nb_{horizon}d": GaussianNB(),
         }
 
-        # Calibrate probabilities (Platt Scaling) for models that need it.
-        # XGBoost + LightGBM: already calibrated via logloss training objective.
-        # AdaBoost: wrap to get reliable probabilities.
-        # LinearSVC: already wrapped above.
-        # GaussianNB: naturally outputs posteriors.
-        classifiers = {}
-        for name, clf in base_classifiers.items():
-            if name.startswith("logistic_regression") or name.startswith("adaboost"):
-                classifiers[name] = CalibratedClassifierCV(estimator=clf, method="sigmoid", cv=3)
-            else:
-                classifiers[name] = clf
-
-        for name, clf in classifiers.items():
+        # Train one model at a time, save to disk, then immediately free RAM
+        for name, (clf, input_type) in base_classifiers.items():
             print(f"\n>>> Training {name}...")
-            
-            # Logistic Regression needs scaled features
-            if name.startswith("logistic_regression"):
-                X_tr, X_te = X_train_scaled, X_test_scaled
-            else:
-                X_tr, X_te = X_train, X_test
 
-            if name.startswith("xgboost") or name.startswith("lightgbm"):
-                # Pass eval_set to the base estimator via fit_params
-                clf.fit(X_tr, y_train)
-            else:
-                clf.fit(X_tr, y_train)
+            X_tr = X_train_scaled if input_type == "scaled" else X_train
+            X_te = X_test_scaled  if input_type == "scaled" else X_test
 
-            preds = clf.predict(X_te)
-            probas = clf.predict_proba(X_te)[:, 1]
+            clf.fit(X_tr, y_train)
+
+            preds      = clf.predict(X_te)
+            probas     = clf.predict_proba(X_te)[:, 1]
             train_preds = clf.predict(X_tr)
 
-            acc = accuracy_score(y_test, preds)
-            train_acc = accuracy_score(y_train, train_preds)
-            f1 = f1_score(y_test, preds, zero_division=0)
-            roc = roc_auc_score(y_test, probas)
+            acc        = accuracy_score(y_test, preds)
+            train_acc  = accuracy_score(y_train, train_preds)
+            f1         = f1_score(y_test, preds, zero_division=0)
+            roc        = roc_auc_score(y_test, probas)
 
             overfit_status = _detect_overfit(train_acc, acc)
             print(f"Train Acc={train_acc:.3f} | Test Acc={acc:.3f} | F1={f1:.3f} | ROC-AUC={roc:.3f}")
@@ -455,7 +435,7 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
 
             cv_scores = {}
             if name.startswith("logistic_regression") or name.startswith("random_forest"):
-                X_cv = X_train_scaled if name.startswith("logistic_regression") else X_train
+                X_cv = X_tr
                 cv_scores = _cv_score(clf, X_cv, y_train)
                 if cv_scores["cv_test_acc"] is not None:
                     print(f"TimeSeriesCV: train={cv_scores['cv_train_acc']:.3f} | "
@@ -481,6 +461,12 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
                 **cv_scores,
             }
 
+            # ── Free this model from RAM before training the next one ──────────
+            del clf, preds, probas, train_preds
+            gc.collect()
+
+
+
         # --- Evaluate Auto Ensemble (7-Model Accuracy-Weighted Hard Voting) ---
         print(f"\n>>> Evaluating Auto Ensemble (7-Model Weighted Consensus) for {horizon}d...")
         
@@ -494,14 +480,17 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
 
         if valid_models:
             # --- Vectorized batch prediction (no Python for-loop) ---
-            # For each model, predict all X_test rows at once to minimize RAM churn
+            # For each model, reload from disk (models were freed from RAM after training)
             all_model_probs = []  # shape: (n_models, n_test_samples, 2)
-            for name, weight in zip(valid_models, model_weights):
-                clf = classifiers[name]
-                needs_scale = name.startswith("logistic_regression") or name.startswith("linear_svc") or name.startswith("gaussian_nb")
+            for name in valid_models:
+                saved_path = all_results[name]["artifact_path"]
+                clf_loaded = joblib.load(saved_path)
+                needs_scale = name.startswith("logistic_regression")
                 X_input = X_test_scaled if needs_scale else X_test.values
-                probs = clf.predict_proba(X_input)  # shape: (n_test_samples, 2)
+                probs = clf_loaded.predict_proba(X_input)  # shape: (n_test_samples, 2)
                 all_model_probs.append(probs)
+                del clf_loaded  # free immediately after use
+                gc.collect()
 
             # Stack to (n_models, n_samples, 2)
             prob_matrix = np.array(all_model_probs)  # (n_models, n_samples, 2)
