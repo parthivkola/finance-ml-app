@@ -241,28 +241,28 @@ async def predict(req: PredictRequest, request: Request):
                             
                 if not model_objects:
                     raise FileNotFoundError(f"No models found for horizon {horizon}d to run ensemble.")
-                    
-                # 1. Hard Voting
-                votes = [1 if mo["probs"][1] > 0.5 else 0 for mo in model_objects]
-                up_votes = sum(votes)
-                total_votes = len(votes)
-                
-                # Check for tie
-                if up_votes == total_votes / 2:
-                    # 2-2 tie -> Force a neutral output by simulating low confidence
-                    best_proxy_model = model_objects[0]
-                    probas = [0.5, 0.5]
-                else:
-                    # Find majority direction
-                    winning_class = 1 if up_votes > total_votes / 2 else 0
-                    
-                    # Filter models that voted with the majority
-                    winning_models = [mo for mo in model_objects if (1 if mo["probs"][1] > 0.5 else 0) == winning_class]
-                    
-                    # Pick the one with the highest confidence in the winning direction
-                    best_proxy_model = max(winning_models, key=lambda x: x["probs"][winning_class])
-                    probas = best_proxy_model["probs"]
-                
+
+                # Accuracy-Weighted Soft Voting (mirrors trainer.py evaluation logic)
+                # Pull each model's test accuracy from DB to use as its weight
+                model_accuracies = {}
+                try:
+                    for r in registry_records:
+                        model_accuracies[r.model_name] = r.accuracy or 0.5
+                except Exception:
+                    pass
+
+                probs_stack = np.array([mo["probs"] for mo in model_objects])  # (n_models, 2)
+                weights = np.array([model_accuracies.get(mo["name"], 0.5) for mo in model_objects])
+                weighted_probs = (probs_stack * weights[:, None]).sum(axis=0) / weights.sum()
+
+                winning_class = 1 if weighted_probs[1] > 0.5 else 0
+                probas = weighted_probs
+
+                # For SHAP: use highest accuracy-weighted confidence model as proxy
+                best_proxy_model = max(
+                    model_objects,
+                    key=lambda x: x["probs"][winning_class] * model_accuracies.get(x["name"], 0.5)
+                )
                 model = best_proxy_model["model"]
                 model_name = best_proxy_model["name"]
                 feature_row_input = best_proxy_model["feature_input"]
