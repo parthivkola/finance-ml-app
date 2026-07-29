@@ -1,124 +1,165 @@
-# Financial Market Intelligence System
+<div align="center">
+  <h1>📈 Financial Market Intelligence System</h1>
+  <p><strong>Enterprise-grade AI/ML platform for multi-horizon stock prediction and real-time news sentiment analysis.</strong></p>
 
-> AI-powered financial news sentiment analysis and stock movement prediction platform.
+  [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+  [![React 19](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black)](https://reactjs.org/)
+  [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+</div>
 
----
+<br/>
 
-## Architecture
+The **Financial Market Intelligence System** synthesizes quantitative technical indicators with Natural Language Processing (NLP) to forecast 1-day, 3-day, and 5-day stock movements. Unlike black-box models, this platform prioritizes **Explainable AI (XAI)** using SHAP to provide transparent, real-time feature attribution for every prediction.
 
-```
-financial-market-intelligence-system/
-├── backend/                   # FastAPI + ML pipeline (Python / uv)
-│   ├── src/market_intelligence/
-│   │   ├── api/               # FastAPI routers (predict, news, history, models)
-│   │   ├── data/              # Yahoo Finance + AlphaVantage ingestors
-│   │   ├── db/                # SQLAlchemy models + Alembic migrations
-│   │   ├── ml/                # Trainer, explainability (SHAP), feature engineering
-│   │   ├── nlp/               # FinBERT + VADER sentiment pipeline
-│   │   └── scheduler.py       # APScheduler: hourly refresh + auto-retrain
-│   ├── tests/                 # pytest: unit, integration, system
-│   ├── alembic/               # Database migrations
-│   └── Dockerfile
-├── frontend/                  # React 18 + TypeScript + Vite
-│   ├── src/
-│   │   ├── api/               # Axios API client
-│   │   └── components/        # Sidebar, ModelSelector, StockChart, ShapExplainer, NewsFeed
-│   ├── nginx.conf             # Production nginx config
-│   └── Dockerfile
-├── docker-compose.yml         # One-command full-stack deployment
-└── README.md
-```
-
-## Features
-
-- **Multi-Horizon Prediction** — Forecast stock trends across 1-day, 3-day, and 5-day horizons.
-- **Enriched Feature Engineering** — 50+ quantitative features including regime detection, RSI crossovers, MACD signals, Bollinger percentages, and live macro-economic context (SPY/VIX).
-- **Multi-Model Inference** — XGBoost, LightGBM, Random Forest, Logistic Regression with selectable champion models.
-- **Explainable AI (XAI)** — Dynamic SHAP feature impact charts per prediction.
-- **NLP Pipeline** — FinBERT (primary) + VADER (fallback) real-time news sentiment scoring via RSS.
-- **Hourly Auto-Refresh** — APScheduler fetches new prices and news automatically every hour.
-- **Auto-Retrain Engine** — Models automatically retrain when 30+ new price rows are added.
-- **Responsive Mobile UI** — Glassmorphism React interface built for cross-device compatibility.
-- **Full Audit Trail** — All predictions and API calls logged to PostgreSQL.
+Built with an autonomous background scheduler, it continuously ingests live RSS news, scores articles via financial transformers (FinBERT/VADER), updates OHLCV prices, and self-maintains through automated model retraining.
 
 ---
 
-## Quick Start (Docker)
+## 📸 Dashboard Preview
+
+*(Placeholders for your screenshots — add them to the `docs/` folder!)*
+
+<div align="center">
+  <img src="docs/dashboard.png" alt="Dashboard View" width="800"/>
+  <p><i>Live prediction dashboard featuring dynamic SHAP analysis and Recharts visualizations.</i></p>
+</div>
+
+---
+
+## ✨ Key Features
+
+- 🔮 **Multi-Horizon Forecasting**: Predict 1-day, 3-day, and 5-day market trends using an optimized machine learning pipeline.
+- 🧠 **Multi-Model Inference**: Employs an accuracy-weighted soft-voting ensemble comprising **XGBoost, LightGBM, Random Forest,** and **Logistic Regression**.
+- 🔍 **Explainable AI (XAI)**: Generates dynamic **SHAP** (SHapley Additive exPlanations) impact charts per prediction, explaining exactly *why* a decision was made.
+- 📰 **3-Tier NLP Pipeline**: Real-time news sentiment scoring via RSS, falling back gracefully from **FinBERT** to **DistilBERT** to **VADER** depending on compute constraints.
+- ⚙️ **Autonomous Operations**: Embedded `APScheduler` fetches prices/news hourly, triggers automated re-training when enough new data accumulates, and runs a daily 02:00 UTC DB/disk pruning cycle.
+- 🛡️ **Zero Data Leakage**: Enforces strict per-symbol grouping during feature engineering and utilizes `TimeSeriesSplit` cross-validation to prevent temporal look-ahead bias.
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+graph TD
+    %% Styling
+    classDef client fill:#61DAFB,stroke:#333,stroke-width:2px,color:#000
+    classDef api fill:#009688,stroke:#333,stroke-width:2px,color:#fff
+    classDef ml fill:#FF9900,stroke:#333,stroke-width:2px,color:#000
+    classDef db fill:#336791,stroke:#333,stroke-width:2px,color:#fff
+    classDef bg fill:#8B5A2B,stroke:#333,stroke-width:2px,color:#fff
+
+    subgraph Client Layer
+        UI[React 19 Frontend<br/>Vite / TypeScript / Recharts]:::client
+    end
+
+    subgraph API Layer
+        API[FastAPI Backend<br/>REST Endpoints]:::api
+    end
+
+    subgraph Machine Learning Engine
+        XAI[SHAP Explainer<br/>Tree & Linear]:::ml
+        Ensemble[4-Model Soft Voting Ensemble<br/>XGB / LGBM / RF / LogReg]:::ml
+        NLP[3-Tier NLP Pipeline<br/>FinBERT / DistilBERT / VADER]:::ml
+    end
+
+    subgraph Database Layer
+        DB[(PostgreSQL 15<br/>Prices, News, Models, Logs)]:::db
+    end
+
+    subgraph Autonomous Workers
+        Scheduler[APScheduler<br/>Cron Jobs]:::bg
+        LiveRSS[Live RSS Ingestor]:::bg
+    end
+
+    %% Flow connections
+    UI <-->|HTTP JSON| API
+    API <-->|SQLAlchemy 2.0| DB
+    API -->|Feature Request| Ensemble
+    Ensemble -->|Predictions| XAI
+    XAI -->|Attribution Payload| API
+    
+    Scheduler -->|15m: Scrape News| LiveRSS
+    LiveRSS --> NLP
+    NLP -->|Score & Store| DB
+    Scheduler -->|Hourly: Price Refresh| DB
+    Scheduler -->|Trigger Condition| Ensemble
+```
+
+---
+
+## 💻 Technology Stack
+
+| Category | Technologies |
+|---|---|
+| **Frontend** | React 19, TypeScript, Vite, Recharts, Vanilla CSS (Glassmorphism) |
+| **Backend** | Python 3.10+, FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2 |
+| **Machine Learning** | XGBoost, LightGBM, Scikit-Learn, SHAP, Optuna |
+| **NLP** | Transformers (HuggingFace FinBERT/DistilBERT), NLTK (VADER) |
+| **Infrastructure** | Docker Compose, PostgreSQL 15, `uv` (Fast Python Package Manager), Nginx |
+
+---
+
+## 🚀 Quick Start (Docker)
+
+The fastest way to run the entire stack locally is using Docker Compose.
 
 ```bash
-git clone https://github.com/parthivkola/financial-market-intelligence-system
+# 1. Clone the repository
+git clone https://github.com/parthivkola/financial-market-intelligence-system.git
 cd financial-market-intelligence-system
 
-# Add your API keys
+# 2. Setup environment variables
 cp .env.example .env
-# Fill in ALPHAVANTAGE_API_KEY and HUGGINGFACE_TOKEN in .env
+# Open .env and add your ALPHAVANTAGE_API_KEY and HUGGINGFACE_TOKEN
 
-docker compose up --build
+# 3. Build and launch the containers
+docker compose up --build -d
 ```
 
-- **Frontend:** http://localhost:5173
-- **Backend API:** http://localhost:8080
-- **Swagger Docs:** http://localhost:8080/docs
+**Services will be available at:**
+- **Frontend App:** [http://localhost:5173](http://localhost:5173)
+- **Backend API:** [http://localhost:8080](http://localhost:8080)
+- **Interactive API Docs (Swagger):** [http://localhost:8080/docs](http://localhost:8080/docs)
 
 ---
 
-## Local Development
+## ☁️ Deployment Instructions (AWS / Cloud)
 
-### Prerequisites
-- Python 3.10+ with `uv` (`pip install uv`)
-- Node.js 18+
-- Docker + Docker Compose
+This application is designed to be highly resilient on cloud infrastructure (e.g., AWS EC2 `t3.micro`/`t3.small`). 
 
-### Backend
-
-```bash
-cd backend
-uv sync
-docker compose up -d postgres   # start PostgreSQL only
-uv run alembic upgrade head     # apply DB migrations
-PYTHONPATH=src uv run python src/market_intelligence/ml/trainer.py   # train models
-PYTHONPATH=src uv run fastapi dev src/market_intelligence/api/main.py --port 8080
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev          # http://localhost:5173
-```
-
-### Tests
-
-```bash
-cd backend
-PYTHONPATH=src uv run pytest -v
-```
+1. **Provision a Server**: Ubuntu 22.04 LTS is recommended. Install `docker` and `docker-compose`.
+2. **Clone & Configure**: Clone the repo and setup your `.env` file.
+3. **Run**: 
+   ```bash
+   docker compose up -d --build
+   ```
+4. **Nginx Dynamic DNS**: The provided `nginx.conf` utilizes Docker's internal DNS (`127.0.0.11`) to prevent 502 Bad Gateway errors if the backend container dynamically restarts (e.g., during intense ML training memory spikes).
+5. **Memory Optimization**: The system enforces **Sequential ML Training** and aggressive garbage collection (`gc.collect()`) between trials to ensure it never triggers a Linux OOM killer, even on 1GB RAM instances.
 
 ---
 
-## Environment Variables
+## 📖 Core API Endpoints
 
-| Variable | Description | Required |
+The FastAPI backend automatically generates interactive Swagger documentation. Here are the core routes:
+
+| Method | Endpoint | Description |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string | ✅ |
-| `ALPHAVANTAGE_API_KEY` | AlphaVantage news API key | ✅ |
-| `HUGGINGFACE_TOKEN` | HuggingFace token for FinBERT | ✅ |
+| `GET` | `/api/v1/health` | System health check and available models |
+| `GET` | `/api/v1/models` | Lists all trained models with cross-validated metrics |
+| `GET` | `/api/v1/history/{symbol}`| Returns up to 90 days of historical OHLCV prices |
+| `GET` | `/api/v1/news/{symbol}` | Returns recent news articles scored for sentiment |
+| `POST` | `/api/v1/predict` | Executes ML inference and returns prediction + SHAP values |
 
 ---
 
-## API Endpoints
+## ⚖️ Disclaimer
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/v1/health` | System health + available models |
-| `GET` | `/api/v1/models` | All trained models with metrics |
-| `GET` | `/api/v1/history/{symbol}` | Historical OHLCV prices |
-| `GET` | `/api/v1/news/{symbol}` | Scored news articles |
-| `POST` | `/api/v1/predict` | AI prediction with SHAP explanation |
+**For research and educational purposes only. Not financial advice.** 
+The predictions generated by this software should not be used to make actual investment decisions.
 
 ---
 
-## License
-
-MIT
+<div align="center">
+  <p>Built with ❤️ by Parthiv Kola</p>
+</div>
