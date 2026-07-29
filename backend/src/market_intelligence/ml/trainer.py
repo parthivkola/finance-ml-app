@@ -517,21 +517,10 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
             # Winning class is whichever averaged probability is higher
             winning_classes = (weighted_probs[:, 1] > 0.5).astype(int)
 
-            # Max confidence from winning-direction models
+            # Confidence = the weighted average probability in the winning direction
+            # This is naturally consistent with soft voting: high when all models agree strongly
             ensemble_preds = winning_classes.tolist()
-            ensemble_probas = []
-            for s in range(prob_matrix.shape[1]):
-                wc = winning_classes[s]
-                if tie_mask[s]:
-                    ensemble_probas.append(0.5)
-                else:
-                    # Find models that individually voted for the winning class
-                    voting_mask = binary_votes[:, s] == wc
-                    if voting_mask.any():
-                        max_conf = prob_matrix[voting_mask, s, wc].max()
-                    else:
-                        max_conf = prob_matrix[:, s, wc].max()
-                    ensemble_probas.append(float(max_conf))
+            ensemble_probas = weighted_probs[np.arange(len(winning_classes)), winning_classes].tolist()
 
             ens_acc = accuracy_score(y_test, ensemble_preds)
             ens_f1 = f1_score(y_test, ensemble_preds, zero_division=0)
