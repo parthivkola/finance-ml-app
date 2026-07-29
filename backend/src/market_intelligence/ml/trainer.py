@@ -343,6 +343,7 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
         best_xgb_params = xgb_study.best_params
         best_xgb_params["random_state"] = 42
         best_xgb_params["eval_metric"] = "logloss"
+        best_xgb_params["objective"] = "binary:logistic"
         print(f"✅ XGBoost best CV accuracy: {xgb_study.best_value:.4f}")
 
         # ── LightGBM Tuning ──
