@@ -9,14 +9,15 @@ interface Props {
 export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
   const [models, setModels] = useState<ModelMetrics[]>([]);
   const [loading, setLoading] = useState(true);
+  const [championName, setChampionName] = useState<string | null>(null);
+  const [isFallback, setIsFallback] = useState(false);
 
   useEffect(() => {
-    api.getModels()
-      .then(data => {
-        // Only keep valid multi-horizon models (e.g. xgboost_1d, lightgbm_3d)
+    // Fetch all models + best model in parallel
+    Promise.all([api.getModels(), api.getBestModel()])
+      .then(([data, best]) => {
         const VALID = /^(xgboost|lightgbm|random_forest|logistic_regression)_(1|3|5)d$/;
         const filtered = data.filter(m => VALID.test(m.model_name));
-        // Dedup by model_name, taking highest version
         const unique = filtered.reduce((acc, curr) => {
           if (!acc[curr.model_name] || acc[curr.model_name].version < curr.version) {
             acc[curr.model_name] = curr;
@@ -24,8 +25,30 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
           return acc;
         }, {} as Record<string, ModelMetrics>);
         setModels(Object.values(unique));
+
+        // Auto-select champion if nothing is selected yet
+        setChampionName(best.model_name);
+        setIsFallback(best.is_fallback);
+        if (!selectedModel || selectedModel === '') {
+          onSelect(best.model_name);
+        }
+      })
+      .catch(() => {
+        // If /models/best fails, fall back to loading models only
+        api.getModels().then(data => {
+          const VALID = /^(xgboost|lightgbm|random_forest|logistic_regression)_(1|3|5)d$/;
+          const filtered = data.filter(m => VALID.test(m.model_name));
+          const unique = filtered.reduce((acc, curr) => {
+            if (!acc[curr.model_name] || acc[curr.model_name].version < curr.version) {
+              acc[curr.model_name] = curr;
+            }
+            return acc;
+          }, {} as Record<string, ModelMetrics>);
+          setModels(Object.values(unique));
+        });
       })
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -36,26 +59,55 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
 
   return (
     <div className="glass-panel model-selector-container">
-      <div>
-        <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-          Select Champion Model
-        </label>
-        <select 
-          className="input-field"
-          value={selectedModel}
-          onChange={(e) => onSelect(e.target.value)}
-          style={{ width: '250px', textTransform: 'capitalize' }}
-        >
-          {models.map(m => (
-            <option key={m.model_name} value={m.model_name}>
-              {m.model_name.replace(/_/g, ' ')}
-            </option>
-          ))}
-        </select>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+            Select Model
+            {championName && (
+              <span style={{
+                marginLeft: '0.5rem',
+                fontSize: '0.7rem',
+                background: 'rgba(99,179,237,0.15)',
+                color: 'var(--accent-up)',
+                borderRadius: '4px',
+                padding: '1px 6px',
+                fontWeight: 600,
+                letterSpacing: '0.03em',
+              }}>
+                ⭐ {championName.replace(/_/g, ' ')} auto-selected
+              </span>
+            )}
+          </label>
+          <select
+            className="input-field"
+            value={selectedModel}
+            onChange={(e) => onSelect(e.target.value)}
+            style={{ width: '260px', textTransform: 'capitalize' }}
+          >
+            {models.map(m => (
+              <option key={m.model_name} value={m.model_name}>
+                {m.model_name === championName ? '⭐ ' : ''}{m.model_name.replace(/_/g, ' ')}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {isFallback && (
+          <div style={{
+            fontSize: '0.75rem',
+            color: '#f6ad55',
+            background: 'rgba(246,173,85,0.1)',
+            borderRadius: '6px',
+            padding: '4px 10px',
+            border: '1px solid rgba(246,173,85,0.3)',
+          }}>
+            ⚠️ All models flagged overfit — showing least-bad
+          </div>
+        )}
       </div>
 
       {selectedData && (
-        <div className="model-stats-border" style={{ display: 'flex', gap: '1.5rem' }}>
+        <div className="model-stats-border" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ACCURACY</div>
             <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -76,13 +128,13 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
           </div>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>STATUS</div>
-            <div style={{ 
-              fontSize: '1rem', 
-              fontWeight: 600, 
+            <div style={{
+              fontSize: '1rem',
+              fontWeight: 600,
               color: selectedData.overfit_status?.includes('OVERFIT') ? 'var(--accent-down)' : 'var(--accent-up)',
               display: 'flex',
               alignItems: 'center',
-              height: '1.25rem'
+              height: '1.25rem',
             }}>
               {selectedData.overfit_status || '✅ OK'}
             </div>

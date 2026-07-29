@@ -20,6 +20,17 @@ export interface ModelMetrics {
   roc_auc: number | null;
 }
 
+export interface BestModelResponse {
+  model_name: string;
+  version: string;
+  accuracy: number | null;
+  train_accuracy: number | null;
+  overfit_status: string | null;
+  f1_score: number | null;
+  roc_auc: number | null;
+  is_fallback: boolean;
+}
+
 export interface HealthResponse {
   status: string;
   version: string;
@@ -69,6 +80,8 @@ export const api = {
   getHealth: () => apiClient.get<HealthResponse>("/health").then(res => res.data),
   
   getModels: () => apiClient.get<ModelMetrics[]>("/models").then(res => res.data),
+
+  getBestModel: () => apiClient.get<BestModelResponse>("/models/best").then(res => res.data),
   
   getHistory: (symbol: string, limit: number = 90) => 
     apiClient.get<HistoryRecord[]>(`/history/${symbol}?limit=${limit}`).then(res => res.data),
@@ -79,3 +92,4 @@ export const api = {
   predict: (symbol: string, modelName: string) => 
     apiClient.post<PredictResponse>("/predict", { symbol, model_name: modelName }).then(res => res.data),
 };
+

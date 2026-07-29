@@ -3,17 +3,22 @@ Additional API routers — satisfies FR-API-002, FR-API-003, FR-API-005.
 
 GET /api/v1/news/{symbol}       — recent scored news articles
 GET /api/v1/models              — all trained models with metrics (model selection support)
+GET /api/v1/models/best         — best non-overfit model by accuracy (dynamic champion)
 GET /api/v1/history/{symbol}    — historical price records
 """
 from __future__ import annotations
+import re
 
 from fastapi import APIRouter, HTTPException
 
-from market_intelligence.api.schemas import HistoryResponse, ModelMetrics, NewsResponse
+from market_intelligence.api.schemas import BestModelResponse, HistoryResponse, ModelMetrics, NewsResponse
 from market_intelligence.db.models import ModelRegistry, NewsArticle, StockPrice
 from market_intelligence.db.session import SessionLocal
 
 router = APIRouter()
+
+# Valid model name pattern — must match trainer output
+_VALID_MODEL_RE = re.compile(r'^(xgboost|lightgbm|random_forest|logistic_regression)_(1|3|5)d$')
 
 
 @router.get("/news/{symbol}", response_model=list[NewsResponse], tags=["News"])
@@ -41,6 +46,69 @@ def get_news(symbol: str, limit: int = 20):
             )
             for a in articles
         ]
+    finally:
+        db.close()
+
+
+@router.get("/models/best", response_model=BestModelResponse, tags=["Models"])
+def get_best_model():
+    """
+    Dynamically elect the champion model:
+    1. Only consider models that have a valid name (e.g. xgboost_1d)
+    2. Exclude any model whose overfit_status contains 'OVERFIT'
+    3. Among the remainder, pick the one with the highest test accuracy
+    4. Falls back to highest accuracy overall if all are flagged overfit
+    """
+    from sqlalchemy import func
+    db = SessionLocal()
+    try:
+        subq = (
+            db.query(
+                ModelRegistry.model_name,
+                func.max(ModelRegistry.trained_at).label("max_at"),
+            )
+            .group_by(ModelRegistry.model_name)
+            .subquery()
+        )
+        records = (
+            db.query(ModelRegistry)
+            .join(
+                subq,
+                (ModelRegistry.model_name == subq.c.model_name)
+                & (ModelRegistry.trained_at == subq.c.max_at),
+            )
+            .all()
+        )
+
+        # Filter to valid multi-horizon model names only
+        valid = [r for r in records if _VALID_MODEL_RE.match(r.model_name or "")]
+        if not valid:
+            raise HTTPException(status_code=404, detail="No trained models found. Run training first.")
+
+        # Prefer non-overfit models; fall back to all if every model is flagged
+        non_overfit = [r for r in valid if "OVERFIT" not in (r.overfit_status or "")]
+        candidates = non_overfit if non_overfit else valid
+
+        # Champion = highest test accuracy; tie-break by ROC-AUC then F1
+        champion = max(
+            candidates,
+            key=lambda r: (
+                r.accuracy or 0.0,
+                r.roc_auc or 0.0,
+                r.f1_score or 0.0,
+            ),
+        )
+
+        return BestModelResponse(
+            model_name=champion.model_name,
+            version=champion.version,
+            accuracy=champion.accuracy,
+            train_accuracy=champion.train_accuracy,
+            overfit_status=champion.overfit_status,
+            f1_score=champion.f1_score,
+            roc_auc=champion.roc_auc,
+            is_fallback=len(non_overfit) == 0,
+        )
     finally:
         db.close()
 

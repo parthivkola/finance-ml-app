@@ -40,6 +40,18 @@ class PredictResponse(BaseModel):
     indicators: Optional[TechnicalIndicators] = None
 
 
+class BestModelResponse(BaseModel):
+    """Returned by GET /models/best — the dynamically-elected champion model."""
+    model_name: str
+    version: str
+    accuracy: Optional[float]
+    train_accuracy: Optional[float] = None
+    overfit_status: Optional[str] = None
+    f1_score: Optional[float]
+    roc_auc: Optional[float]
+    is_fallback: bool = False  # True when all models were overfit and we fell back
+
+
 class ModelMetrics(BaseModel):
     id: int
     model_name: str
