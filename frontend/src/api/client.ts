@@ -1,11 +1,8 @@
 import axios from "axios";
 
-// Point to the FastAPI backend
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "/api/v1",
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" },
 });
 
 export interface ModelMetrics {
@@ -76,20 +73,45 @@ export interface PredictResponse {
   disclaimer: string;
 }
 
+export interface ExplainRequest {
+  symbol: string;
+  model_name: string;
+  prediction: string;
+  confidence: number;
+  overfit_status?: string | null;
+  explanation: FeatureImpact[];
+  indicators?: {
+    sma_20: number | null;
+    sma_50: number | null;
+    rsi: number | null;
+    macd: number | null;
+  } | null;
+}
+
+export interface ExplainResponse {
+  summary: string;
+  provider: string;
+}
+
 export const api = {
-  getHealth: () => apiClient.get<HealthResponse>("/health").then(res => res.data),
-  
-  getModels: () => apiClient.get<ModelMetrics[]>("/models").then(res => res.data),
+  getHealth: () =>
+    apiClient.get<HealthResponse>("/health").then(res => res.data),
 
-  getBestModel: () => apiClient.get<BestModelResponse>("/models/best").then(res => res.data),
-  
-  getHistory: (symbol: string, limit: number = 90) => 
+  getModels: () =>
+    apiClient.get<ModelMetrics[]>("/models").then(res => res.data),
+
+  getBestModel: () =>
+    apiClient.get<BestModelResponse>("/models/best").then(res => res.data),
+
+  getHistory: (symbol: string, limit = 90) =>
     apiClient.get<HistoryRecord[]>(`/history/${symbol}?limit=${limit}`).then(res => res.data),
-    
-  getNews: (symbol: string, limit: number = 20) => 
-    apiClient.get<NewsRecord[]>(`/news/${symbol}?limit=${limit}`).then(res => res.data),
-    
-  predict: (symbol: string, modelName: string) => 
-    apiClient.post<PredictResponse>("/predict", { symbol, model_name: modelName }).then(res => res.data),
-};
 
+  getNews: (symbol: string, limit = 20) =>
+    apiClient.get<NewsRecord[]>(`/news/${symbol}?limit=${limit}`).then(res => res.data),
+
+  predict: (symbol: string, modelName: string) =>
+    apiClient.post<PredictResponse>("/predict", { symbol, model_name: modelName }).then(res => res.data),
+
+  explain: (req: ExplainRequest) =>
+    apiClient.post<ExplainResponse>("/explain", req).then(res => res.data),
+};

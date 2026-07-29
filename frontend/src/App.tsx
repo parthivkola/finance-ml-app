@@ -9,27 +9,32 @@ import { api, type HistoryRecord, type NewsRecord, type PredictResponse } from '
 
 function App() {
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [selectedModelOverfitStatus, setSelectedModelOverfitStatus] = useState<string | null>(null);
   const [currentSymbol, setCurrentSymbol] = useState<string | null>(null);
-  
+
   const [historyData, setHistoryData] = useState<HistoryRecord[]>([]);
   const [newsData, setNewsData] = useState<NewsRecord[]>([]);
   const [predictData, setPredictData] = useState<PredictResponse | null>(null);
 
-  // When a prediction completes successfully, fetch auxiliary data
+  const handleModelSelect = (modelName: string, overfitStatus?: string | null) => {
+    setSelectedModel(modelName);
+    setSelectedModelOverfitStatus(overfitStatus ?? null);
+  };
+
   const handlePredictionComplete = async (symbol: string, prediction: PredictResponse | null) => {
     setCurrentSymbol(symbol);
     setPredictData(prediction);
-    
+
     if (prediction) {
       try {
         const [history, news] = await Promise.all([
           api.getHistory(symbol),
-          api.getNews(symbol)
+          api.getNews(symbol),
         ]);
         setHistoryData(history);
         setNewsData(news);
       } catch (err) {
-        console.error("Error fetching auxiliary data:", err);
+        console.error('Error fetching auxiliary data:', err);
       }
     } else {
       setHistoryData([]);
@@ -40,25 +45,26 @@ function App() {
   return (
     <div className="app-layout">
       <Sidebar />
-      
+
       <main className="main-content">
         <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem' }}>
           <div>
             <h1 style={{ fontSize: '2rem', marginBottom: '0.25rem' }}>Financial Market Intelligence</h1>
-            <p style={{ margin: 0 }}>AI-powered sentiment analysis and stock movement prediction</p>
+            <p style={{ margin: 0 }}>Technical analysis · NLP sentiment scoring · Multi-horizon forecasting</p>
           </div>
         </header>
 
-        <ModelSelector 
-          selectedModel={selectedModel} 
-          onSelect={setSelectedModel} 
+        <ModelSelector
+          selectedModel={selectedModel}
+          onSelect={handleModelSelect}
         />
 
         <div className="dashboard-grid">
           {/* Left Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            <PredictionPanel 
+            <PredictionPanel
               selectedModel={selectedModel}
+              selectedModelOverfitStatus={selectedModelOverfitStatus}
               onPredictionComplete={handlePredictionComplete}
             />
             {currentSymbol && historyData.length > 0 && (

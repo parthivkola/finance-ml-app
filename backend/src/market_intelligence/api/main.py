@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from market_intelligence.api import predict, routes
+from market_intelligence.api import explain, predict, routes
 from market_intelligence.api.schemas import HealthResponse
 from market_intelligence.ml.trainer import MODELS_DIR
 from market_intelligence.scheduler import create_scheduler
@@ -53,6 +53,7 @@ app.add_middleware(
 # Register all routers
 app.include_router(predict.router, prefix="/api/v1")
 app.include_router(routes.router, prefix="/api/v1")
+app.include_router(explain.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health", response_model=HealthResponse, tags=["Health"])

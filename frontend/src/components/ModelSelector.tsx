@@ -3,7 +3,7 @@ import { api, type ModelMetrics } from '../api/client';
 
 interface Props {
   selectedModel: string;
-  onSelect: (modelName: string) => void;
+  onSelect: (modelName: string, overfitStatus?: string | null) => void;
 }
 
 export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
@@ -30,7 +30,7 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
         setChampionName(best.model_name);
         setIsFallback(best.is_fallback);
         if (!selectedModel || selectedModel === '') {
-          onSelect(best.model_name);
+          onSelect(best.model_name, best.overfit_status ?? null);
         }
       })
       .catch(() => {
@@ -62,31 +62,36 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <label style={{ display: 'block', fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-            Select Model
+            Model
             {championName && (
               <span style={{
                 marginLeft: '0.5rem',
                 fontSize: '0.7rem',
-                background: 'rgba(99,179,237,0.15)',
-                color: 'var(--accent-up)',
+                background: 'rgba(99,179,237,0.1)',
+                color: 'var(--accent-neutral)',
                 borderRadius: '4px',
                 padding: '1px 6px',
-                fontWeight: 600,
-                letterSpacing: '0.03em',
+                fontWeight: 500,
+                letterSpacing: '0.02em',
+                border: '1px solid rgba(99,179,237,0.2)',
               }}>
-                ⭐ {championName.replace(/_/g, ' ')} auto-selected
+                ★ champion
               </span>
             )}
           </label>
           <select
             className="input-field"
             value={selectedModel}
-            onChange={(e) => onSelect(e.target.value)}
+            onChange={(e) => {
+              const name = e.target.value;
+              const m = models.find(m => m.model_name === name);
+              onSelect(name, m?.overfit_status ?? null);
+            }}
             style={{ width: '260px', textTransform: 'capitalize' }}
           >
             {models.map(m => (
               <option key={m.model_name} value={m.model_name}>
-                {m.model_name === championName ? '⭐ ' : ''}{m.model_name.replace(/_/g, ' ')}
+                {m.model_name === championName ? '★ ' : ''}{m.model_name.replace(/_/g, ' ')}
               </option>
             ))}
           </select>
@@ -96,12 +101,12 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
           <div style={{
             fontSize: '0.75rem',
             color: '#f6ad55',
-            background: 'rgba(246,173,85,0.1)',
-            borderRadius: '6px',
+            background: 'rgba(246,173,85,0.08)',
+            borderRadius: '4px',
             padding: '4px 10px',
-            border: '1px solid rgba(246,173,85,0.3)',
+            border: '1px solid rgba(246,173,85,0.25)',
           }}>
-            ⚠️ All models flagged overfit — showing least-bad
+            ! All models flagged overfit — showing best available
           </div>
         )}
       </div>
