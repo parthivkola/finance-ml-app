@@ -25,11 +25,19 @@ services:
       - DATABASE_URL=postgresql://kola:secret@postgres:5432/finance-market-intelligence-platform
       - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
       - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
     volumes:
       - model_artifacts:/models
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   frontend:
@@ -39,7 +47,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
