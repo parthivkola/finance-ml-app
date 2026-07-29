@@ -22,7 +22,7 @@ from market_intelligence.ml.trainer import FEATURE_COLS, MODELS_DIR, build_featu
 
 router = APIRouter()
 
-VALID_MODELS = tuple(f"{m}_{h}d" for m in ("xgboost", "lightgbm", "random_forest", "logistic_regression") for h in (1, 3, 5))
+VALID_MODELS = tuple(f"{m}_{h}d" for m in ("xgboost", "lightgbm", "random_forest", "logistic_regression") for h in (1, 3, 5)) + tuple(f"auto_{h}d" for h in (1, 3, 5))
 
 
 def _load_model(model_name: str):
@@ -158,20 +158,103 @@ async def predict(req: PredictRequest, request: Request):
 
         # 2. Load model
         try:
-            model = _load_model(model_name)
+            if model_name.startswith("auto_"):
+                best_conf = -1.0
+                best_model = None
+                best_actual_name = None
+                best_feature_input = None
+                
+                # Test all 4 underlying models for this horizon
+                # First, query DB to find which ones are overfit so we can exclude them
+                overfit_models = set()
+                try:
+                    from market_intelligence.db.models import ModelRegistry
+                    registry_records = db.query(ModelRegistry).filter(
+                        ModelRegistry.model_name.like(f"%_{horizon}d")
+                    ).all()
+                    for r in registry_records:
+                        if r.overfit_status and "OVERFIT" in r.overfit_status:
+                            overfit_models.add(r.model_name)
+                except Exception as db_err:
+                    print(f"Failed to query overfit status for ensemble: {db_err}")
+
+                for base_name in ["xgboost", "lightgbm", "random_forest", "logistic_regression"]:
+                    test_name = f"{base_name}_{horizon}d"
+                    if test_name in overfit_models:
+                        continue  # Skip overfit models
+                        
+                    try:
+                        m = _load_model(test_name)
+                    except FileNotFoundError:
+                        continue
+                        
+                    if test_name.startswith("logistic_regression"):
+                        scaler_path = MODELS_DIR / f"scaler_{horizon}d.joblib"
+                        if scaler_path.exists():
+                            scaler = joblib.load(scaler_path)
+                            f_input = scaler.transform(feature_row)
+                        else:
+                            f_input = feature_row.values
+                    else:
+                        f_input = feature_row
+                        
+                    probs = m.predict_proba(f_input)[0]
+                    conf = float(max(probs))
+                    
+                    if conf > best_conf:
+                        best_conf = conf
+                        best_model = m
+                        best_actual_name = test_name
+                        best_feature_input = f_input
+                        
+                if not best_model:
+                    # Fallback: if all were overfit, just load whatever is available
+                    for base_name in ["xgboost", "lightgbm", "random_forest", "logistic_regression"]:
+                        test_name = f"{base_name}_{horizon}d"
+                        try:
+                            m = _load_model(test_name)
+                        except FileNotFoundError:
+                            continue
+                            
+                        if test_name.startswith("logistic_regression"):
+                            scaler_path = MODELS_DIR / f"scaler_{horizon}d.joblib"
+                            if scaler_path.exists():
+                                scaler = joblib.load(scaler_path)
+                                f_input = scaler.transform(feature_row)
+                            else:
+                                f_input = feature_row.values
+                        else:
+                            f_input = feature_row
+                            
+                        probs = m.predict_proba(f_input)[0]
+                        conf = float(max(probs))
+                        
+                        if conf > best_conf:
+                            best_conf = conf
+                            best_model = m
+                            best_actual_name = test_name
+                            best_feature_input = f_input
+                            
+                    if not best_model:
+                        raise FileNotFoundError(f"No models found for horizon {horizon}d to run ensemble.")
+                    
+                model = best_model
+                model_name = best_actual_name
+                feature_row_input = best_feature_input
+            else:
+                model = _load_model(model_name)
+                # Scale if logistic regression
+                if model_name.startswith("logistic_regression"):
+                    scaler_path = MODELS_DIR / f"scaler_{horizon}d.joblib"
+                    if scaler_path.exists():
+                        scaler = joblib.load(scaler_path)
+                        feature_row_input = scaler.transform(feature_row)
+                    else:
+                        feature_row_input = feature_row.values
+                else:
+                    feature_row_input = feature_row
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
-
-        # Scale if logistic regression
-        if model_name.startswith("logistic_regression"):
-            scaler_path = MODELS_DIR / f"scaler_{horizon}d.joblib"
-            if scaler_path.exists():
-                scaler = joblib.load(scaler_path)
-                feature_row_input = scaler.transform(feature_row)
-            else:
-                feature_row_input = feature_row.values
-        else:
-            feature_row_input = feature_row
 
         probas = model.predict_proba(feature_row_input)[0]
         confidence = float(max(probas))

@@ -24,13 +24,30 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
           }
           return acc;
         }, {} as Record<string, ModelMetrics>);
-        setModels(Object.values(unique));
+        const baseModels = Object.values(unique);
+        
+        // Create auto ensemble models for each horizon present
+        const horizons = new Set(baseModels.map(m => m.model_name.split('_').pop()));
+        const autoModels = Array.from(horizons).map(h => ({
+          id: 0,
+          model_name: `auto_${h}`,
+          version: 'ensemble',
+          trained_at: new Date().toISOString(),
+          accuracy: null,
+          train_accuracy: null,
+          f1_score: null,
+          roc_auc: null,
+          overfit_status: 'DYNAMIC',
+          artifact_path: ''
+        } as ModelMetrics));
+        
+        setModels([...autoModels, ...baseModels]);
 
-        // Auto-select champion if nothing is selected yet
-        setChampionName(best.model_name);
+        // Auto-select ensemble champion if nothing is selected yet
+        setChampionName(`auto_${best.model_name.split('_').pop()}`);
         setIsFallback(best.is_fallback);
         if (!selectedModel || selectedModel === '') {
-          onSelect(best.model_name, best.overfit_status ?? null);
+          onSelect(`auto_${best.model_name.split('_').pop()}`, 'DYNAMIC');
         }
       })
       .catch(() => {
@@ -113,37 +130,45 @@ export const ModelSelector: React.FC<Props> = ({ selectedModel, onSelect }) => {
 
       {selectedData && (
         <div className="model-stats-border" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ACCURACY</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {(selectedData.accuracy! * 100).toFixed(1)}%
+          {selectedData.model_name.startsWith('auto_') ? (
+            <div style={{ padding: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-neutral)', borderRadius: '4px', fontSize: '0.875rem' }}>
+              Dynamically evaluates all models and selects the one with the highest confidence.
             </div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>F1 SCORE</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {selectedData.f1_score?.toFixed(3)}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ROC-AUC</div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {selectedData.roc_auc?.toFixed(3)}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>STATUS</div>
-            <div style={{
-              fontSize: '1rem',
-              fontWeight: 600,
-              color: selectedData.overfit_status?.includes('OVERFIT') ? 'var(--accent-down)' : 'var(--accent-up)',
-              display: 'flex',
-              alignItems: 'center',
-              height: '1.25rem',
-            }}>
-              {selectedData.overfit_status || '✅ OK'}
-            </div>
-          </div>
+          ) : (
+            <>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ACCURACY</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {selectedData.accuracy ? (selectedData.accuracy * 100).toFixed(1) + '%' : '—'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>F1 SCORE</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {selectedData.f1_score?.toFixed(3) || '—'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ROC-AUC</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {selectedData.roc_auc?.toFixed(3) || '—'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>STATUS</div>
+                <div style={{
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  color: selectedData.overfit_status?.includes('OVERFIT') ? 'var(--accent-down)' : 'var(--accent-up)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  height: '1.25rem',
+                }}>
+                  {selectedData.overfit_status || '✅ OK'}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
