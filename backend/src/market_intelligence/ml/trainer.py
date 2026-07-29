@@ -383,10 +383,14 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
         }
 
         # Wrap in CalibratedClassifierCV to calibrate probabilities (Platt Scaling)
-        classifiers = {
-            name: CalibratedClassifierCV(estimator=clf, method="sigmoid", cv=3)
-            for name, clf in base_classifiers.items()
-        }
+        # XGBoost and LightGBM naturally output well-calibrated probabilities with logloss.
+        # Random Forest and Logistic Regression need it more.
+        classifiers = {}
+        for name, clf in base_classifiers.items():
+            if name.startswith("random_forest") or name.startswith("logistic_regression"):
+                classifiers[name] = CalibratedClassifierCV(estimator=clf, method="sigmoid", cv=3)
+            else:
+                classifiers[name] = clf
 
         for name, clf in classifiers.items():
             print(f"\n>>> Training {name}...")
