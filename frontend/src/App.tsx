@@ -67,15 +67,15 @@ function App() {
               selectedModelOverfitStatus={selectedModelOverfitStatus}
               onPredictionComplete={handlePredictionComplete}
             />
-            {currentSymbol && historyData.length > 0 && (
-              <StockChart data={historyData} />
+            {predictData && predictData.explanation && (
+              <ShapExplainer data={predictData.explanation} />
             )}
           </div>
 
           {/* Right Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            {predictData && predictData.explanation && (
-              <ShapExplainer data={predictData.explanation} />
+            {currentSymbol && historyData.length > 0 && (
+              <StockChart data={historyData} />
             )}
             {currentSymbol && (
               <NewsFeed data={newsData} />
