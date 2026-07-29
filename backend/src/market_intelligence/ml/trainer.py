@@ -546,7 +546,7 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
             }
 
             # Free the large probability matrix from RAM immediately
-            del prob_matrix, all_model_probs, binary_votes
+            del prob_matrix, all_model_probs
             gc.collect()
 
         (MODELS_DIR / f"feature_cols_{horizon}d.json").write_text(json.dumps(available_cols))
