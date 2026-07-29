@@ -8,6 +8,7 @@ ML training pipeline with:
 """
 from __future__ import annotations
 
+import gc
 import json
 import warnings
 from datetime import datetime, timezone
@@ -18,7 +19,8 @@ import numpy as np
 import optuna
 import pandas as pd
 import ta
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.ensemble import AdaBoostClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
@@ -26,12 +28,15 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.calibration import CalibratedClassifierCV
+from sklearn.naive_bayes import GaussianNB
 from sklearn.preprocessing import StandardScaler
+from sklearn.svm import LinearSVC
+from sklearn.tree import DecisionTreeClassifier
 import xgboost as xgb
 import lightgbm as lgb
 
 warnings.filterwarnings("ignore")
+
 
 MODELS_DIR = Path(__file__).resolve().parents[4] / "models"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -346,6 +351,9 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
         best_xgb_params["eval_metric"] = "logloss"
         best_xgb_params["objective"] = "binary:logistic"
         print(f"✅ XGBoost best CV accuracy: {xgb_study.best_value:.4f}")
+        # Free Optuna trial objects from RAM
+        del xgb_study
+        gc.collect()
 
         # ── LightGBM Tuning ──
         def optimize_lgbm(trial):
@@ -371,25 +379,48 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
         best_lgbm_params["random_state"] = 42
         best_lgbm_params["verbose"] = -1
         print(f"✅ LightGBM best CV accuracy: {lgbm_study.best_value:.4f}")
+        # Free Optuna trial objects from RAM
+        del lgbm_study
+        gc.collect()
 
         base_classifiers = {
             f"logistic_regression_{horizon}d": LogisticRegression(
                 C=0.1, max_iter=2000, solver="saga", random_state=42
             ),
             f"random_forest_{horizon}d": RandomForestClassifier(
-                n_estimators=300, max_depth=6, min_samples_leaf=10,
-                min_samples_split=20, max_features="sqrt", random_state=42, n_jobs=1,
+                # Reduced from 300→100 trees to save ~70MB RAM on t3.micro
+                n_estimators=100, max_depth=5, min_samples_leaf=15,
+                min_samples_split=30, max_features="sqrt", random_state=42, n_jobs=1,
             ),
             f"xgboost_{horizon}d": xgb.XGBClassifier(**best_xgb_params),
             f"lightgbm_{horizon}d": lgb.LGBMClassifier(**best_lgbm_params),
+            # --- 3 new diverse classifiers ---
+            # AdaBoost with decision stumps: focuses on hard-to-classify samples,
+            # orthogonal to gradient boosting (which focuses on residuals, not sample weights)
+            f"adaboost_{horizon}d": AdaBoostClassifier(
+                estimator=DecisionTreeClassifier(max_depth=1),
+                n_estimators=50, learning_rate=0.5, random_state=42, algorithm="SAMME"
+            ),
+            # LinearSVC: finds a max-margin linear boundary in high-dim space.
+            # Use LinearSVC (not RBF-SVM) to avoid computing an N×N kernel matrix.
+            # Wrap in CalibratedClassifierCV to get probabilities from the SVM.
+            f"linear_svc_{horizon}d": CalibratedClassifierCV(
+                estimator=LinearSVC(C=0.1, max_iter=2000, random_state=42),
+                method="sigmoid", cv=3
+            ),
+            # GaussianNB: pure statistical prior — extremely low variance,
+            # catches regime changes when all other models are confused
+            f"gaussian_nb_{horizon}d": GaussianNB(),
         }
 
-        # Wrap in CalibratedClassifierCV to calibrate probabilities (Platt Scaling)
-        # XGBoost and LightGBM naturally output well-calibrated probabilities with logloss.
-        # Random Forest and Logistic Regression need it more.
+        # Calibrate probabilities (Platt Scaling) for models that need it.
+        # XGBoost + LightGBM: already calibrated via logloss training objective.
+        # AdaBoost: wrap to get reliable probabilities.
+        # LinearSVC: already wrapped above.
+        # GaussianNB: naturally outputs posteriors.
         classifiers = {}
         for name, clf in base_classifiers.items():
-            if name.startswith("random_forest") or name.startswith("logistic_regression"):
+            if name.startswith("logistic_regression") or name.startswith("adaboost"):
                 classifiers[name] = CalibratedClassifierCV(estimator=clf, method="sigmoid", cv=3)
             else:
                 classifiers[name] = clf
@@ -450,48 +481,67 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
                 **cv_scores,
             }
 
-        # --- Evaluate Auto Ensemble ---
-        print(f"\n>>> Evaluating Auto Ensemble (Hybrid Consensus) for {horizon}d...")
-        ensemble_preds = []
-        ensemble_probas = []
+        # --- Evaluate Auto Ensemble (7-Model Accuracy-Weighted Hard Voting) ---
+        print(f"\n>>> Evaluating Auto Ensemble (7-Model Weighted Consensus) for {horizon}d...")
         
-        # Collect models that aren't overfit
+        # Collect non-overfit models and their test accuracies as weights
         valid_models = []
+        model_weights = []
         for name, r in all_results.items():
             if name.endswith(f"_{horizon}d") and "OVERFIT" not in r["overfit_status"]:
                 valid_models.append(name)
-                
+                model_weights.append(r["accuracy"])  # use test accuracy as vote weight
+
         if valid_models:
-            for i in range(len(X_test)):
-                row_unscaled = X_test.iloc[[i]]
-                row_scaled = X_test_scaled[i:i+1]
-                
-                model_probs = []
-                for name in valid_models:
-                    clf = classifiers[name]
-                    X_input = row_scaled if name.startswith("logistic_regression") else row_unscaled
-                    model_probs.append(clf.predict_proba(X_input)[0])
-                    
-                # Hard Voting
-                votes = [1 if p[1] > 0.5 else 0 for p in model_probs]
-                up_votes = sum(votes)
-                total_votes = len(votes)
-                
-                if up_votes == total_votes / 2:
-                    ensemble_preds.append(0)
+            # --- Vectorized batch prediction (no Python for-loop) ---
+            # For each model, predict all X_test rows at once to minimize RAM churn
+            all_model_probs = []  # shape: (n_models, n_test_samples, 2)
+            for name, weight in zip(valid_models, model_weights):
+                clf = classifiers[name]
+                needs_scale = name.startswith("logistic_regression") or name.startswith("linear_svc") or name.startswith("gaussian_nb")
+                X_input = X_test_scaled if needs_scale else X_test.values
+                probs = clf.predict_proba(X_input)  # shape: (n_test_samples, 2)
+                all_model_probs.append(probs)
+
+            # Stack to (n_models, n_samples, 2)
+            prob_matrix = np.array(all_model_probs)  # (n_models, n_samples, 2)
+            weights_arr = np.array(model_weights)     # (n_models,)
+
+            # Binary votes per model per sample: shape (n_models, n_samples)
+            binary_votes = (prob_matrix[:, :, 1] > 0.5).astype(float)  # 1=UP, 0=DOWN
+
+            # Weighted vote totals
+            weighted_up   = (binary_votes       * weights_arr[:, None]).sum(axis=0)  # (n_samples,)
+            weighted_down = ((1 - binary_votes) * weights_arr[:, None]).sum(axis=0)  # (n_samples,)
+            total_weight  = weights_arr.sum()
+
+            # Winning class per sample
+            tie_mask = np.isclose(weighted_up, weighted_down)
+            winning_classes = np.where(weighted_up > weighted_down, 1, 0)
+            winning_classes[tie_mask] = 0  # ties → force DOWN (conservative)
+
+            # Max confidence from winning-direction models
+            ensemble_preds = winning_classes.tolist()
+            ensemble_probas = []
+            for s in range(prob_matrix.shape[1]):
+                wc = winning_classes[s]
+                if tie_mask[s]:
                     ensemble_probas.append(0.5)
                 else:
-                    winning_class = 1 if up_votes > total_votes / 2 else 0
-                    winning_probs = [p for p in model_probs if (1 if p[1] > 0.5 else 0) == winning_class]
-                    max_prob = max(winning_probs, key=lambda x: x[winning_class])[1]
-                    ensemble_preds.append(winning_class)
-                    ensemble_probas.append(max_prob)
-                    
+                    # Find models that individually voted for the winning class
+                    voting_mask = binary_votes[:, s] == wc
+                    if voting_mask.any():
+                        max_conf = prob_matrix[voting_mask, s, wc].max()
+                    else:
+                        max_conf = prob_matrix[:, s, wc].max()
+                    ensemble_probas.append(float(max_conf))
+
             ens_acc = accuracy_score(y_test, ensemble_preds)
             ens_f1 = f1_score(y_test, ensemble_preds, zero_division=0)
             ens_roc = roc_auc_score(y_test, ensemble_probas)
-            
-            print(f"Auto Ensemble: Test Acc={ens_acc:.3f} | F1={ens_f1:.3f} | ROC-AUC={ens_roc:.3f}")
+            n_models_used = len(valid_models)
+
+            print(f"Auto Ensemble ({n_models_used} models): Test Acc={ens_acc:.3f} | F1={ens_f1:.3f} | ROC-AUC={ens_roc:.3f}")
             
             auto_name = f"auto_{horizon}d"
             _save_to_registry(
@@ -508,6 +558,10 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
                 "artifact_path": "ensemble_virtual",
                 "feature_cols": available_cols,
             }
+
+            # Free the large probability matrix from RAM immediately
+            del prob_matrix, all_model_probs, binary_votes
+            gc.collect()
 
         (MODELS_DIR / f"feature_cols_{horizon}d.json").write_text(json.dumps(available_cols))
         
