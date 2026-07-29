@@ -443,6 +443,65 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
                 **cv_scores,
             }
 
+        # --- Evaluate Auto Ensemble ---
+        print(f"\n>>> Evaluating Auto Ensemble (Hybrid Consensus) for {horizon}d...")
+        ensemble_preds = []
+        ensemble_probas = []
+        
+        # Collect models that aren't overfit
+        valid_models = []
+        for name, r in all_results.items():
+            if name.endswith(f"_{horizon}d") and "OVERFIT" not in r["overfit_status"]:
+                valid_models.append(name)
+                
+        if valid_models:
+            for i in range(len(X_test)):
+                row_unscaled = X_test.iloc[[i]]
+                row_scaled = X_test_scaled[i:i+1]
+                
+                model_probs = []
+                for name in valid_models:
+                    clf = classifiers[name]
+                    X_input = row_scaled if name.startswith("logistic_regression") else row_unscaled
+                    model_probs.append(clf.predict_proba(X_input)[0])
+                    
+                # Hard Voting
+                votes = [1 if p[1] > 0.5 else 0 for p in model_probs]
+                up_votes = sum(votes)
+                total_votes = len(votes)
+                
+                if up_votes == total_votes / 2:
+                    ensemble_preds.append(0)
+                    ensemble_probas.append(0.5)
+                else:
+                    winning_class = 1 if up_votes > total_votes / 2 else 0
+                    winning_probs = [p for p in model_probs if (1 if p[1] > 0.5 else 0) == winning_class]
+                    max_prob = max(winning_probs, key=lambda x: x[winning_class])[1]
+                    ensemble_preds.append(winning_class)
+                    ensemble_probas.append(max_prob)
+                    
+            ens_acc = accuracy_score(y_test, ensemble_preds)
+            ens_f1 = f1_score(y_test, ensemble_preds, zero_division=0)
+            ens_roc = roc_auc_score(y_test, ensemble_probas)
+            
+            print(f"Auto Ensemble: Test Acc={ens_acc:.3f} | F1={ens_f1:.3f} | ROC-AUC={ens_roc:.3f}")
+            
+            auto_name = f"auto_{horizon}d"
+            _save_to_registry(
+                auto_name, version, Path("ensemble_virtual"), ens_acc, ens_acc, "DYNAMIC", ens_f1, ens_roc, total_price_rows=len(df)
+            )
+            all_results[auto_name] = {
+                "version": version,
+                "horizon": horizon,
+                "accuracy": round(ens_acc, 4),
+                "train_accuracy": round(ens_acc, 4),
+                "f1_score": round(ens_f1, 4),
+                "roc_auc": round(ens_roc, 4),
+                "overfit_status": "DYNAMIC",
+                "artifact_path": "ensemble_virtual",
+                "feature_cols": available_cols,
+            }
+
         (MODELS_DIR / f"feature_cols_{horizon}d.json").write_text(json.dumps(available_cols))
         
     print("\n✅ All models trained and saved to", MODELS_DIR)
