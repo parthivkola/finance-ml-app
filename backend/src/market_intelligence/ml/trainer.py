@@ -507,18 +507,15 @@ def train_all(raw_df: pd.DataFrame) -> dict[str, dict]:
             prob_matrix = np.array(all_model_probs)  # (n_models, n_samples, 2)
             weights_arr = np.array(model_weights)     # (n_models,)
 
-            # Binary votes per model per sample: shape (n_models, n_samples)
-            binary_votes = (prob_matrix[:, :, 1] > 0.5).astype(float)  # 1=UP, 0=DOWN
+            # --- Accuracy-Weighted Soft Voting ---
+            # Each model's probability is scaled by its test accuracy weight,
+            # then averaged. This respects both the direction AND magnitude of conviction.
+            # weights_arr shape: (n_models,), prob_matrix shape: (n_models, n_samples, 2)
+            weighted_probs = (prob_matrix * weights_arr[:, None, None]).sum(axis=0) / weights_arr.sum()
+            # weighted_probs shape: (n_samples, 2)
 
-            # Weighted vote totals
-            weighted_up   = (binary_votes       * weights_arr[:, None]).sum(axis=0)  # (n_samples,)
-            weighted_down = ((1 - binary_votes) * weights_arr[:, None]).sum(axis=0)  # (n_samples,)
-            total_weight  = weights_arr.sum()
-
-            # Winning class per sample
-            tie_mask = np.isclose(weighted_up, weighted_down)
-            winning_classes = np.where(weighted_up > weighted_down, 1, 0)
-            winning_classes[tie_mask] = 0  # ties → force DOWN (conservative)
+            # Winning class is whichever averaged probability is higher
+            winning_classes = (weighted_probs[:, 1] > 0.5).astype(int)
 
             # Max confidence from winning-direction models
             ensemble_preds = winning_classes.tolist()
