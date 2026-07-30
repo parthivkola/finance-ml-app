@@ -21,10 +21,8 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     op.add_column('news_articles', sa.Column('url', sa.String(), nullable=True))
-    op.add_column('news_articles', sa.Column('summary', sa.String(), nullable=True))
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column('news_articles', 'summary')
     op.drop_column('news_articles', 'url')
