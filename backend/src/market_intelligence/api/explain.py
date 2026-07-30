@@ -52,6 +52,16 @@ class ExplainResponse(BaseModel):
 # ── Prompt builder ────────────────────────────────────────────────────────────
 
 def _build_prompt(req: ExplainRequest) -> str:
+    import yfinance as yf
+    
+    # Attempt to resolve the company name for a more natural LLM response
+    company_name = req.symbol
+    try:
+        info = yf.Ticker(req.symbol).info
+        company_name = info.get("shortName") or info.get("longName") or req.symbol
+    except Exception:
+        pass
+
     horizon = (
         "3-day" if "3d" in req.model_name else
         "5-day" if "5d" in req.model_name else
@@ -132,7 +142,7 @@ def _build_prompt(req: ExplainRequest) -> str:
     return f"""You are a senior quantitative analyst at a systematic hedge fund. Your job is to write a concise, plain-English market brief for a portfolio manager based on a model output.
 
 === MODEL OUTPUT ===
-Ticker:        {req.symbol}
+Company:       {company_name} ({req.symbol})
 Model:         {model_clean}
 Forecast:      {req.prediction} over {horizon} horizon
 Confidence:    {confidence_pct:.1f}%
@@ -152,7 +162,7 @@ Write exactly 2–3 tight paragraphs:
 
 Paragraph 1 — Forecast summary: State the directional call (or if it's NEUTRAL due to low confidence), the horizon, and the confidence level. Frame it as a probabilistic view.
 
-Paragraph 2 — Driver analysis: Explain what the top SHAP features actually mean in market terms. Connect the dots — e.g. if RSI is overbought AND MACD is positive AND price is above its 20-day SMA, explain what that combination typically signals and why the model is reading it as {direction} pressure. Be specific to {req.symbol}.
+Paragraph 2 — Driver analysis: Explain what the top SHAP features actually mean in market terms. Connect the dots — e.g. if RSI is overbought AND MACD is positive AND price is above its 20-day SMA, explain what that combination typically signals and why the model is reading it as {direction} pressure. Be specific to {company_name}.
 
 Paragraph 3 (optional, only if warranted) — Risks and caveats: If the signal is NEUTRAL, explain why the model lacks conviction (e.g. conflicting technicals). If there are overfitting concerns, state this clearly. If everything is consistent, skip this paragraph.
 
