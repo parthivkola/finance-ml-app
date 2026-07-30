@@ -18,16 +18,17 @@ except Exception as e:
     print(f"Warning: Could not import FinBERTAnalyzer ({e}). Will use VADER exclusively.")
     HAS_FINBERT = False
 
-def process_unscored_news():
+def process_unscored_news(symbol: str = None, fast_mode: bool = False):
     """
-    Finds all news articles in the DB without a sentiment score,
+    Finds news articles in the DB without a sentiment score,
     runs them through FinBERT, and updates the database.
+    If fast_mode is True, completely bypasses FinBERT and forces VADER to avoid OOM.
     If FinBERT fails (e.g., out of memory or HuggingFace error), it falls back to VADER.
     """
     db: Session = SessionLocal()
     
     analyzer = None
-    if HAS_FINBERT:
+    if HAS_FINBERT and not fast_mode:
         try:
             analyzer = FinBERTAnalyzer()
         except Exception as e:
@@ -36,8 +37,12 @@ def process_unscored_news():
     vader_analyzer = VaderAnalyzer()
     
     try:
-        # Get all articles where sentiment_score is NULL
-        unscored_articles = db.query(NewsArticle).filter(NewsArticle.sentiment_score.is_(None)).all()
+        # Get articles where sentiment_score is NULL
+        query = db.query(NewsArticle).filter(NewsArticle.sentiment_score.is_(None))
+        if symbol:
+            query = query.filter(NewsArticle.symbol == symbol)
+            
+        unscored_articles = query.all()
         
         if not unscored_articles:
             print("No new articles to score! Everything is up to date.")

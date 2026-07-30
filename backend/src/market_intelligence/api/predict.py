@@ -145,7 +145,7 @@ async def predict(req: PredictRequest, request: Request):
                 news_df = fetch_rss_news(symbol)
                 if not news_df.empty:
                     save_news(news_df, symbol)
-                    process_unscored_news()
+                    process_unscored_news(symbol=symbol, fast_mode=True)
                     # Retry getting sentiment
                     new_score, has_sentiment = _get_avg_sentiment(symbol)
                     if has_sentiment:
